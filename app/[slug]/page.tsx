@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
-import { MapPin, Phone, Clock, Check, ChevronRight, Star, CalendarX, User, Mail, Smartphone, ArrowLeft } from 'lucide-react'
+import { MapPin, Phone, Clock, Check, ChevronRight, Star, CalendarX, User, Mail, Smartphone, ArrowLeft, Scissors } from 'lucide-react'
 
 // --- TYPY ---
 interface Service {
@@ -23,6 +23,7 @@ interface Profile {
   description: string
   address: string
   phone: string
+  logo_url: string | null // PŘIDÁNO: Logo
 }
 
 interface BusinessHour {
@@ -54,8 +55,8 @@ export default function SalonPublicPage({ params }: PageProps) {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
-  const [bookedTimes, setBookedTimes] = useState<string[]>([]) // NOVÉ: Obsazené časy
-  const [loadingSlots, setLoadingSlots] = useState(false)      // NOVÉ: Načítání slotů
+  const [bookedTimes, setBookedTimes] = useState<string[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
 
   // Kontaktní údaje
   const [clientInfo, setClientInfo] = useState({
@@ -69,7 +70,7 @@ export default function SalonPublicPage({ params }: PageProps) {
     if (slug) fetchSalonData()
   }, [slug])
 
-  // 2. Načtení OBSAZENÝCH TERMÍNŮ (při změně data)
+  // 2. Načtení OBSAZENÝCH TERMÍNŮ
   useEffect(() => {
     if (selectedDate && profile) {
       fetchBookedSlots()
@@ -113,20 +114,17 @@ export default function SalonPublicPage({ params }: PageProps) {
     }
   }
 
-  // NOVÉ: Funkce pro získání obsazených časů z DB
   const fetchBookedSlots = async () => {
     try {
       setLoadingSlots(true)
       const { data } = await supabase
         .from('bookings')
-        .select('start_time') // Stačí nám jen čas
+        .select('start_time')
         .eq('salon_id', profile!.id)
         .eq('booking_date', selectedDate)
-        .neq('status', 'cancelled') // Ignorujeme zrušené
+        .neq('status', 'cancelled')
 
       if (data) {
-        // Převedeme na pole stringů ["10:00", "14:00"]
-        // Ořízneme sekundy, pokud tam jsou (HH:MM:SS -> HH:MM)
         const times = data.map(b => b.start_time.slice(0, 5))
         setBookedTimes(times)
       }
@@ -137,7 +135,7 @@ export default function SalonPublicPage({ params }: PageProps) {
     }
   }
 
-  // Generování časů (s filtrací obsazených)
+  // Generování časů
   const getAvailableTimes = (dateString: string) => {
     if (!dateString) return []
     const date = new Date(dateString)
@@ -159,7 +157,6 @@ export default function SalonPublicPage({ params }: PageProps) {
       const m = (currentTimeInMinutes % 60).toString().padStart(2, '0')
       const timeString = `${h}:${m}`
 
-      // NOVÉ: Pokud není tento čas v seznamu obsazených, přidáme ho
       if (!bookedTimes.includes(timeString)) {
         slots.push(timeString)
       }
@@ -231,13 +228,48 @@ export default function SalonPublicPage({ params }: PageProps) {
   return (
     <div className="min-h-screen bg-slate-50 pb-28 md:pb-20">
       
-      {/* HEADER */}
+      {/* HEADER S LOGEM */}
       <header className="bg-white border-b sticky top-0 z-10 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-slate-900">{profile.salon_name}</h1>
-          <div className="flex text-sm text-slate-500 mt-1 gap-3">
-             {profile.address && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.address}</span>}
-             {profile.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {profile.phone}</span>}
+          <div className="flex justify-between items-center">
+            
+            {/* Logo a Název */}
+            <div className="flex items-center gap-4">
+              {profile.logo_url ? (
+                <img 
+                  src={profile.logo_url} 
+                  alt={profile.salon_name} 
+                  className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border border-slate-200 shadow-sm"
+                />
+              ) : (
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <Scissors className="h-6 w-6" />
+                </div>
+              )}
+              
+              <div>
+                <h1 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight">
+                  {profile.salon_name || 'Krásný Salon'}
+                </h1>
+                <div className="flex flex-col sm:flex-row sm:items-center text-sm text-slate-500 mt-1 gap-1 sm:gap-4">
+                  {profile.address && (
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.address}</span>
+                  )}
+                  {profile.phone && (
+                    <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {profile.phone}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Rating (jen na větších obrazovkách) */}
+            <div className="hidden sm:flex flex-col items-end">
+               <div className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded-md text-sm font-bold flex items-center gap-1">
+                 <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" /> 4.9
+               </div>
+               <span className="text-xs text-slate-400 mt-1">Ověřený Salon</span>
+            </div>
+
           </div>
         </div>
       </header>
