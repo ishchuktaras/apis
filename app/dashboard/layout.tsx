@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Scissors, Calendar, Settings, LogOut, User } from 'lucide-react'
+import { Scissors, Calendar, Settings, LogOut, User, Users, LayoutDashboard } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 
 export default function DashboardLayout({
@@ -13,30 +13,45 @@ export default function DashboardLayout({
       {/* BOČNÍ MENU (SIDEBAR) */}
       <aside className="w-64 bg-white border-r hidden md:flex flex-col">
         <div className="p-6 border-b">
-          <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-            <Scissors className="h-6 w-6 text-primary" />
-            Salonio <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded">ADMIN</span>
-          </h1>
+          <Link href="/dashboard">
+            <h1 className="text-xl font-bold flex items-center gap-2 text-slate-800 cursor-pointer">
+              <Scissors className="h-6 w-6 text-slate-900" />
+              Salonio <span className="text-xs font-normal text-slate-500 bg-slate-100 px-2 py-1 rounded">ADMIN</span>
+            </h1>
+          </Link>
         </div>
         
         <nav className="flex-1 p-4 space-y-1">
+          <Link href="/dashboard">
+            <Button variant="ghost" className="w-full justify-start gap-2 mb-1">
+              <LayoutDashboard className="h-4 w-4" />
+              Přehled
+            </Button>
+          </Link>
+
+          <Link href="/dashboard/calendar">
+            <Button variant="ghost" className="w-full justify-start gap-2 mb-1">
+              <Calendar className="h-4 w-4" />
+              Kalendář
+            </Button>
+          </Link>
+
+          <Link href="/dashboard/customers">
+            <Button variant="ghost" className="w-full justify-start gap-2 mb-1">
+              <Users className="h-4 w-4" />
+              Zákazníci
+            </Button>
+          </Link>
+
           <Link href="/dashboard/services">
             <Button variant="ghost" className="w-full justify-start gap-2 mb-1">
               <Scissors className="h-4 w-4" />
               Služby
             </Button>
           </Link>
-          
-          <Link href="/dashboard/calendar">
-             {/* Zatím neexistuje, ale připravíme si odkaz */}
-            <Button variant="ghost" className="w-full justify-start gap-2 mb-1 text-slate-400">
-              <Calendar className="h-4 w-4" />
-              Kalendář (Brzy)
-            </Button>
-          </Link>
 
           <Link href="/dashboard/settings">
-            <Button variant="ghost" className="w-full justify-start gap-2 text-slate-400">
+            <Button variant="ghost" className="w-full justify-start gap-2 text-slate-500">
               <Settings className="h-4 w-4" />
               Nastavení
             </Button>
@@ -54,7 +69,6 @@ export default function DashboardLayout({
             </div>
           </div>
           
-          {/* Tlačítko odhlášení - zatím jen přesměruje */}
           <Link href="/login">
             <Button variant="outline" className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50">
               <LogOut className="h-4 w-4" />
