@@ -7,12 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, AlertCircle } from 'lucide-react'
+import { Clock, AlertCircle, RefreshCw } from 'lucide-react'
 
-// Dny v týdnu pro zobrazení
 const DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota']
 
-// Definice typu pro otevírací dobu (aby TypeScript nekřičel)
 interface BusinessHour {
   id: string
   day_of_week: number
@@ -34,8 +32,13 @@ export default function SettingsPage() {
   const fetchHours = async () => {
     try {
       setLoading(true)
+      console.log('Načítám otevírací dobu...')
+      
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) {
+        console.error('Uživatel není přihlášen')
+        return
+      }
 
       const { data, error } = await supabase
         .from('business_hours')
@@ -43,40 +46,60 @@ export default function SettingsPage() {
         .order('day_of_week', { ascending: true })
 
       if (error) throw error
+      
+      console.log('Načteno záznamů:', data?.length)
       setHours(data || [])
-    } catch (error) {
-      console.error('Chyba:', error)
+
+    } catch (error: any) {
+      console.error('Chyba při načítání:', error.message)
+      alert('Chyba při načítání dat: ' + error.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // 2. Inicializace (pokud salon nemá nastaveno nic)
+  // 2. Inicializace (GENERATOR) - ZDE BYLA CHYBA
   const initializeHours = async () => {
-    setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    try {
+      setLoading(true)
+      console.log('Startuji generování...')
 
-    const defaultHours = Array.from({ length: 7 }, (_, i) => ({
-      user_id: user.id,
-      day_of_week: i,
-      open_time: '09:00',
-      close_time: '17:00',
-      is_closed: i === 0 || i === 6 // Víkend zavřeno
-    }))
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('Chyba: Nejste přihlášen.')
+        return
+      }
 
-    const { error } = await supabase.from('business_hours').insert(defaultHours)
-    
-    if (!error) fetchHours() 
-    else alert('Chyba při inicializaci: ' + error.message)
-    setLoading(false)
+      const defaultHours = Array.from({ length: 7 }, (_, i) => ({
+        user_id: user.id,
+        day_of_week: i,
+        open_time: '09:00',
+        close_time: '17:00',
+        is_closed: i === 0 || i === 6 // Víkend zavřeno
+      }))
+
+      const { error } = await supabase.from('business_hours').insert(defaultHours)
+      
+      if (error) {
+        console.error('Chyba SQL:', error)
+        throw error
+      }
+
+      console.log('Úspěšně vygenerováno. Obnovuji data...')
+      await fetchHours() // Počkáme na načtení
+
+    } catch (error: any) {
+      console.error('Chyba při generování:', error)
+      alert('Nepodařilo se vygenerovat hodiny: ' + error.message)
+    } finally {
+      // TOTO ZARUČÍ, ŽE SE TLAČÍTKO ODBLOKUJE
+      setLoading(false)
+    }
   }
 
   // 3. Uložení změn
   const handleSave = async (id: string, updates: Partial<BusinessHour>) => {
     setSaving(true)
-    
-    // Aktualizujeme lokální stav pro okamžitou odezvu UI
     setHours(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h))
 
     const { error } = await supabase
@@ -85,13 +108,20 @@ export default function SettingsPage() {
       .eq('id', id)
 
     if (error) {
-      alert('Nepodařilo se uložit změnu')
-      // Vrátíme změny zpět v případě chyby (volitelné, pro jednoduchost vynecháno)
+      console.error('Chyba update:', error)
+      alert('Chyba ukládání')
     }
     setSaving(false)
   }
 
-  if (loading) return <div className="p-8 text-center">Načítám nastavení...</div>
+  if (loading && hours.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+         <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
+         <p className="text-slate-500">Načítám nastavení...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -110,26 +140,23 @@ export default function SettingsPage() {
             <div className="text-center py-8">
               <AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
               <p className="text-slate-600 mb-4">Zatím nemáte nastavenou otevírací dobu.</p>
-              <Button onClick={initializeHours}>Vygenerovat standardní (Po-Pá 9-17)</Button>
+              <Button onClick={initializeHours} disabled={loading}>
+                {loading ? 'Pracuji...' : 'Vygenerovat standardní (Po-Pá 9-17)'}
+              </Button>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Seřadíme pole tak, aby Pondělí (1) bylo první, Neděle (0) poslední */}
               {[...hours.slice(1), hours[0]].map((day) => (
                 <div key={day.id} className={`flex items-center justify-between p-3 rounded-lg border ${day.is_closed ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}>
                   
-                  {/* Název dne */}
                   <div className="w-24 font-medium text-slate-700">
                     {DAYS[day.day_of_week]}
                   </div>
 
-                  {/* Přepínač Otevřeno/Zavřeno */}
                   <div className="flex items-center gap-2">
                     <Label htmlFor={`closed-${day.id}`} className="text-xs text-slate-500">
                       {day.is_closed ? 'Zavřeno' : 'Otevřeno'}
                     </Label>
-                    
-                    {/* ZDE BYLA CHYBA: Přidali jsme typ (checked: boolean) */}
                     <Switch 
                       id={`closed-${day.id}`}
                       checked={!day.is_closed}
@@ -137,7 +164,6 @@ export default function SettingsPage() {
                     />
                   </div>
 
-                  {/* Časy (zobrazí se jen když je otevřeno) */}
                   <div className={`flex items-center gap-2 transition-opacity ${day.is_closed ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
                     <Input 
                       type="time" 
