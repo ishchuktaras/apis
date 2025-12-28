@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { TrendingUp, Users, Calendar, ArrowUpRight, ExternalLink, Copy } from 'lucide-react'
+import { TrendingUp, Users, Calendar, ExternalLink, Copy } from 'lucide-react'
 import Link from 'next/link'
 
 export default function DashboardOverview() {
