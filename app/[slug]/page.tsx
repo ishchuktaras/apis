@@ -23,7 +23,7 @@ interface Profile {
   description: string
   address: string
   phone: string
-  logo_url: string | null // PŘIDÁNO: Logo
+  logo_url: string | null
 }
 
 interface BusinessHour {
@@ -172,6 +172,7 @@ export default function SalonPublicPage({ params }: PageProps) {
 
     setIsSubmitting(true)
     try {
+      // 1. Uložení do Supabase
       const { error } = await supabase.from('bookings').insert({
         salon_id: profile.id,
         service_id: selectedServiceId,
@@ -184,6 +185,31 @@ export default function SalonPublicPage({ params }: PageProps) {
       })
 
       if (error) throw error
+
+      // 2. Odeslání E-mailu (Notifikace)
+      // DŮLEŽITÉ: Ve free verzi Resend musíš poslat email SÁM SOBĚ.
+      await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: 'ishchuktaras@gmail.com', // <--- ZMĚŇ TOTO NA SVŮJ REGISTRAČNÍ EMAIL NA RESEND (např. tvoje.jmeno@gmail.com)
+          subject: `Nová rezervace: ${clientInfo.name}`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h1>Máte novou rezervaci! 🎉</h1>
+              <p>Zákazník vytvořil novou rezervaci přes váš web.</p>
+              <hr />
+              <p><strong>Kdo:</strong> ${clientInfo.name}</p>
+              <p><strong>Kdy:</strong> ${selectedDate} v ${selectedTime}</p>
+              <p><strong>Služba:</strong> ${selectedService?.title} (${selectedService?.price} Kč)</p>
+              <p><strong>Kontakt:</strong> ${clientInfo.phone}, ${clientInfo.email}</p>
+              <hr />
+              <a href="${window.location.origin}/dashboard/calendar" style="display: inline-block; background: #000; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Spravovat rezervaci v Adminu</a>
+            </div>
+          `
+        })
+      })
+
       setBookingStep(4)
       
     } catch (err: any) {
@@ -262,7 +288,7 @@ export default function SalonPublicPage({ params }: PageProps) {
               </div>
             </div>
 
-            {/* Rating (jen na větších obrazovkách) */}
+            {/* Rating */}
             <div className="hidden sm:flex flex-col items-end">
                <div className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded-md text-sm font-bold flex items-center gap-1">
                  <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" /> 4.9
