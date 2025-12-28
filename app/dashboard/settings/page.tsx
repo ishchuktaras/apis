@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Clock, AlertCircle, Store, Globe, MapPin, Phone, FileText, Save, Upload, Image as ImageIcon } from 'lucide-react'
+import { toast } from "sonner"
 
 // --- TYPY ---
 const DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota']
@@ -44,7 +45,7 @@ export default function SettingsPage() {
   })
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
-  const [uploadingLogo, setUploadingLogo] = useState(false) // NOVÉ: Stav nahrávání
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -88,6 +89,7 @@ export default function SettingsPage() {
 
     } catch (error) {
       console.error('Chyba při načítání:', error)
+      toast.error("Nepodařilo se načíst data.")
     }
   }
 
@@ -95,6 +97,7 @@ export default function SettingsPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploadingLogo(true)
+      const loadingToast = toast.loading("Nahrávám logo...")
       
       if (!e.target.files || e.target.files.length === 0) {
         throw new Error('Nevybrali jste žádný soubor.')
@@ -105,8 +108,6 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Nejste přihlášen.')
 
-      // Cesta k souboru: user_id/logo.jpg (přepíšeme staré logo stejným názvem pro úsporu místa)
-      // Přidáme timestamp, aby se obešla cache prohlížeče
       const fileName = `${user.id}/logo-${Date.now()}.${fileExt}`
 
       // 1. Nahrání do Storage
@@ -130,10 +131,13 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setProfile(prev => ({ ...prev, logo_url: publicUrl }))
-      alert('Logo úspěšně nahráno!')
+      
+      toast.dismiss(loadingToast)
+      toast.success('Logo bylo úspěšně nahráno!')
 
     } catch (error: any) {
-      alert('Chyba při nahrávání: ' + error.message)
+      toast.dismiss()
+      toast.error('Chyba při nahrávání: ' + error.message)
     } finally {
       setUploadingLogo(false)
     }
@@ -162,15 +166,15 @@ export default function SettingsPage() {
         .eq('id', user.id)
 
       if (error) {
-        if (error.code === '23505') alert('Tato URL adresa je už zabraná.')
+        if (error.code === '23505') toast.error('Tato URL adresa je už zabraná.')
         else throw error
       } else {
-        alert('Profil uložen!')
+        toast.success('Profil byl úspěšně uložen.')
         setProfile(prev => ({ ...prev, slug: formattedSlug }))
       }
 
     } catch (error: any) {
-      alert('Chyba: ' + error.message)
+      toast.error('Chyba: ' + error.message)
     } finally {
       setSavingProfile(false)
     }
@@ -192,12 +196,18 @@ export default function SettingsPage() {
 
     await supabase.from('business_hours').insert(defaultHours)
     fetchData()
+    toast.info("Otevírací doba byla vygenerována.")
   }
 
   const handleHoursSave = async (id: string, updates: Partial<BusinessHour>) => {
     setSavingHours(true)
     setHours(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h))
-    await supabase.from('business_hours').update(updates).eq('id', id)
+    
+    const { error } = await supabase.from('business_hours').update(updates).eq('id', id)
+    
+    if (error) {
+        toast.error("Nepodařilo se uložit otevírací dobu.")
+    }
     setSavingHours(false)
   }
 
@@ -262,7 +272,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* ZBYTEK FORMULÁŘE (STEJNÝ JAKO PŘEDTÍM) */}
+            {/* ZBYTEK FORMULÁŘE */}
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="salonName">Název Salonu</Label>
@@ -330,7 +340,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* 2. KARTA: OTEVÍRACÍ DOBA (BEZE ZMĚN) */}
+      {/* 2. KARTA: OTEVÍRACÍ DOBA */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
