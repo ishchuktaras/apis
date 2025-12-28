@@ -1,20 +1,15 @@
-// lib/supabase.ts
+import { createBrowserClient } from '@supabase/ssr'
 
-import { createClient } from '@supabase/supabase-js'
-
-// Definice typů pro TypeScript (zatím any, později nahradíme vygenerovanými typy z databáze)
-// Až budeš mít tabulky, spustíme: npx supabase gen types typescript
+// Definice typů (zatím any, později nahradíme)
 type Database = any;
 
 // Načtení proměnných prostředí
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// Kontrola, zda proměnné existují (pro debugování)
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Chybí Supabase URL nebo Anon Key. Zkontroluj soubor .env.local')
+  console.error('CRITICAL ERROR: Chybí Supabase URL nebo Anon Key v .env.local')
 }
 
-// Vytvoření a export klienta
-// Tuto instanci budeme importovat v komponentách
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+// Vytvoření a export klienta, který pracuje s Cookies (pro Middleware)
+export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
