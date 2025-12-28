@@ -39,31 +39,42 @@ interface PageProps {
 export default function SalonPublicPage({ params }: PageProps) {
   const { slug } = use(params)
 
-  // Data
+  // Data salonu
   const [profile, setProfile] = useState<Profile | null>(null)
   const [services, setServices] = useState<Service[]>([])
   const [businessHours, setBusinessHours] = useState<BusinessHour[]>([])
+  
+  // Stavy aplikace
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // Rezervační flow
   const [bookingStep, setBookingStep] = useState<1 | 2 | 3 | 4>(1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Rezervační data
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
-  
-  // Kontaktní údaje klienta (Krok 3)
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]) // NOVÉ: Obsazené časy
+  const [loadingSlots, setLoadingSlots] = useState(false)      // NOVÉ: Načítání slotů
+
+  // Kontaktní údaje
   const [clientInfo, setClientInfo] = useState({
     name: '',
     email: '',
     phone: ''
   })
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Načítání dat
+  // 1. Načtení SALONU
   useEffect(() => {
     if (slug) fetchSalonData()
   }, [slug])
+
+  // 2. Načtení OBSAZENÝCH TERMÍNŮ (při změně data)
+  useEffect(() => {
+    if (selectedDate && profile) {
+      fetchBookedSlots()
+    }
+  }, [selectedDate, profile])
 
   const fetchSalonData = async () => {
     try {
@@ -102,7 +113,31 @@ export default function SalonPublicPage({ params }: PageProps) {
     }
   }
 
-  // Generování časů
+  // NOVÉ: Funkce pro získání obsazených časů z DB
+  const fetchBookedSlots = async () => {
+    try {
+      setLoadingSlots(true)
+      const { data } = await supabase
+        .from('bookings')
+        .select('start_time') // Stačí nám jen čas
+        .eq('salon_id', profile!.id)
+        .eq('booking_date', selectedDate)
+        .neq('status', 'cancelled') // Ignorujeme zrušené
+
+      if (data) {
+        // Převedeme na pole stringů ["10:00", "14:00"]
+        // Ořízneme sekundy, pokud tam jsou (HH:MM:SS -> HH:MM)
+        const times = data.map(b => b.start_time.slice(0, 5))
+        setBookedTimes(times)
+      }
+    } catch (error) {
+      console.error('Chyba slotů:', error)
+    } finally {
+      setLoadingSlots(false)
+    }
+  }
+
+  // Generování časů (s filtrací obsazených)
   const getAvailableTimes = (dateString: string) => {
     if (!dateString) return []
     const date = new Date(dateString)
@@ -122,13 +157,18 @@ export default function SalonPublicPage({ params }: PageProps) {
     while (currentTimeInMinutes < endTimeInMinutes) {
       const h = Math.floor(currentTimeInMinutes / 60).toString().padStart(2, '0')
       const m = (currentTimeInMinutes % 60).toString().padStart(2, '0')
-      slots.push(`${h}:${m}`)
+      const timeString = `${h}:${m}`
+
+      // NOVÉ: Pokud není tento čas v seznamu obsazených, přidáme ho
+      if (!bookedTimes.includes(timeString)) {
+        slots.push(timeString)
+      }
+
       currentTimeInMinutes += interval
     }
     return slots
   }
 
-  // --- ODESLÁNÍ REZERVACE ---
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!profile || !selectedServiceId || !selectedDate || !selectedTime) return
@@ -147,8 +187,6 @@ export default function SalonPublicPage({ params }: PageProps) {
       })
 
       if (error) throw error
-      
-      // Úspěch -> Krok 4
       setBookingStep(4)
       
     } catch (err: any) {
@@ -165,7 +203,7 @@ export default function SalonPublicPage({ params }: PageProps) {
   if (error) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-red-500">{error}</div>
   if (!profile) return null
 
-  // --- KROK 4: DĚKOVAČKA (Zobrazí se po odeslání) ---
+  // --- KROK 4: DĚKOVAČKA ---
   if (bookingStep === 4) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -250,7 +288,8 @@ export default function SalonPublicPage({ params }: PageProps) {
               <div>
                 <Label>Čas</Label>
                 {!selectedDate ? <p className="text-sm text-slate-400 mt-2">Nejdříve vyberte datum.</p> :
-                 availableSlots.length === 0 ? <p className="text-sm text-red-500 mt-2">Zavřeno.</p> :
+                 loadingSlots ? <p className="text-sm text-slate-500 mt-2">Ověřuji dostupnost...</p> :
+                 availableSlots.length === 0 ? <p className="text-sm text-red-500 mt-2">Pro tento den je plno nebo zavřeno.</p> :
                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-2 h-48 overflow-y-auto custom-scrollbar pr-1">
                    {availableSlots.map(time => (
                      <button key={time} onClick={() => setSelectedTime(time)}
@@ -266,7 +305,7 @@ export default function SalonPublicPage({ params }: PageProps) {
           </section>
         )}
 
-        {/* KROK 3: KONTAKT (Nový) */}
+        {/* KROK 3: KONTAKT */}
         {bookingStep === 3 && (
           <section className="space-y-4 animate-in slide-in-from-right-8 duration-300">
             <Button variant="ghost" onClick={() => setBookingStep(2)} className="pl-0 text-slate-500 mb-2"><ArrowLeft className="h-4 w-4 mr-1"/> Zpět</Button>
@@ -314,7 +353,7 @@ export default function SalonPublicPage({ params }: PageProps) {
 
       </main>
 
-      {/* STICKY FOOTER (Košík) */}
+      {/* STICKY FOOTER */}
       {selectedService && bookingStep < 4 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 shadow-lg z-50">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
