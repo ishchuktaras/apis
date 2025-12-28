@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, AlertCircle, RefreshCw } from 'lucide-react'
+import { Clock, AlertCircle, RefreshCw, Store, Globe, MapPin, Phone, FileText, Save } from 'lucide-react'
 
+// --- TYPY A KONSTANTY ---
 const DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota']
 
 interface BusinessHour {
@@ -19,114 +20,244 @@ interface BusinessHour {
   is_closed: boolean
 }
 
-export default function SettingsPage() {
-  const [hours, setHours] = useState<BusinessHour[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+interface Profile {
+  salon_name: string
+  slug: string
+  description: string
+  address: string
+  phone: string
+}
 
+export default function SettingsPage() {
+  // Stav pro Otevírací dobu
+  const [hours, setHours] = useState<BusinessHour[]>([])
+  const [loadingHours, setLoadingHours] = useState(true)
+  const [savingHours, setSavingHours] = useState(false)
+
+  // Stav pro Profil
+  const [profile, setProfile] = useState<Profile>({
+    salon_name: '',
+    slug: '',
+    description: '',
+    address: '',
+    phone: ''
+  })
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [savingProfile, setSavingProfile] = useState(false)
+
+  // Načtení dat při startu
   useEffect(() => {
-    fetchHours()
+    fetchData()
   }, [])
 
-  // 1. Načtení dat
-  const fetchHours = async () => {
+  const fetchData = async () => {
     try {
-      setLoading(true)
-      console.log('Načítám otevírací dobu...')
-      
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        console.error('Uživatel není přihlášen')
+        window.location.href = '/login'
         return
       }
 
-      const { data, error } = await supabase
+      // 1. Načtení Profilu
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('salon_name, slug, description, address, phone')
+        .eq('id', user.id)
+        .single()
+      
+      if (profileData) {
+        setProfile({
+          salon_name: profileData.salon_name || '',
+          slug: profileData.slug || '',
+          description: profileData.description || '',
+          address: profileData.address || '',
+          phone: profileData.phone || ''
+        })
+      }
+      setLoadingProfile(false)
+
+      // 2. Načtení Otevírací doby
+      const { data: hoursData, error: hoursError } = await supabase
         .from('business_hours')
         .select('*')
         .order('day_of_week', { ascending: true })
-
-      if (error) throw error
       
-      console.log('Načteno záznamů:', data?.length)
-      setHours(data || [])
+      setHours(hoursData || [])
+      setLoadingHours(false)
 
-    } catch (error: any) {
-      console.error('Chyba při načítání:', error.message)
-      alert('Chyba při načítání dat: ' + error.message)
-    } finally {
-      setLoading(false)
+    } catch (error) {
+      console.error('Chyba při načítání:', error)
     }
   }
 
-  // 2. Inicializace (GENERATOR) - ZDE BYLA CHYBA
-  const initializeHours = async () => {
+  // --- LOGIKA PROFILU ---
+  const handleProfileSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingProfile(true)
+    
     try {
-      setLoading(true)
-      console.log('Startuji generování...')
-
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        alert('Chyba: Nejste přihlášen.')
-        return
-      }
+      if (!user) return
 
-      const defaultHours = Array.from({ length: 7 }, (_, i) => ({
-        user_id: user.id,
-        day_of_week: i,
-        open_time: '09:00',
-        close_time: '17:00',
-        is_closed: i === 0 || i === 6 // Víkend zavřeno
-      }))
-
-      const { error } = await supabase.from('business_hours').insert(defaultHours)
+      // Validace slugu (jen malá písmena a pomlčky)
+      const formattedSlug = profile.slug.toLowerCase().replace(/[^a-z0-9-]/g, '-')
       
-      if (error) {
-        console.error('Chyba SQL:', error)
-        throw error
-      }
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          salon_name: profile.salon_name,
+          slug: formattedSlug,
+          description: profile.description,
+          address: profile.address,
+          phone: profile.phone
+        })
+        .eq('id', user.id)
 
-      console.log('Úspěšně vygenerováno. Obnovuji data...')
-      await fetchHours() // Počkáme na načtení
+      if (error) {
+        if (error.code === '23505') alert('Tato URL adresa je už zabraná. Zvolte jinou.')
+        else throw error
+      } else {
+        alert('Profil byl úspěšně uložen!')
+        setProfile(prev => ({ ...prev, slug: formattedSlug }))
+      }
 
     } catch (error: any) {
-      console.error('Chyba při generování:', error)
-      alert('Nepodařilo se vygenerovat hodiny: ' + error.message)
+      alert('Chyba při ukládání: ' + error.message)
     } finally {
-      // TOTO ZARUČÍ, ŽE SE TLAČÍTKO ODBLOKUJE
-      setLoading(false)
+      setSavingProfile(false)
     }
   }
 
-  // 3. Uložení změn
-  const handleSave = async (id: string, updates: Partial<BusinessHour>) => {
-    setSaving(true)
+  // --- LOGIKA OTEVÍRACÍ DOBY ---
+  const initializeHours = async () => {
+    setLoadingHours(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const defaultHours = Array.from({ length: 7 }, (_, i) => ({
+      user_id: user.id,
+      day_of_week: i,
+      open_time: '09:00',
+      close_time: '17:00',
+      is_closed: i === 0 || i === 6
+    }))
+
+    await supabase.from('business_hours').insert(defaultHours)
+    fetchData() // Obnovit vše
+  }
+
+  const handleHoursSave = async (id: string, updates: Partial<BusinessHour>) => {
+    setSavingHours(true)
     setHours(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h))
-
-    const { error } = await supabase
-      .from('business_hours')
-      .update(updates)
-      .eq('id', id)
-
-    if (error) {
-      console.error('Chyba update:', error)
-      alert('Chyba ukládání')
-    }
-    setSaving(false)
+    await supabase.from('business_hours').update(updates).eq('id', id)
+    setSavingHours(false)
   }
 
-  if (loading && hours.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
-         <RefreshCw className="h-8 w-8 animate-spin text-slate-400" />
-         <p className="text-slate-500">Načítám nastavení...</p>
-      </div>
-    )
+  // --- RENDER ---
+  if (loadingProfile && loadingHours) {
+    return <div className="p-8 text-center">Načítám nastavení...</div>
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-8 pb-10">
       <h1 className="text-3xl font-bold text-slate-800">Nastavení Salonu</h1>
 
+      {/* 1. KARTA: PROFIL SALONU */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Store className="h-5 w-5" /> Veřejný Profil
+          </CardTitle>
+          <CardDescription>Tyto informace uvidí vaši zákazníci na webu.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleProfileSave} className="space-y-4">
+            
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="salonName">Název Salonu</Label>
+                <div className="relative">
+                  <Store className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input 
+                    id="salonName" 
+                    className="pl-9"
+                    placeholder="Např. Kadeřnictví Jana" 
+                    value={profile.salon_name}
+                    onChange={e => setProfile({...profile, salon_name: e.target.value})}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="slug">Webová adresa (URL)</Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input 
+                    id="slug" 
+                    className="pl-9"
+                    placeholder="např. kadernictvi-jana" 
+                    value={profile.slug}
+                    onChange={e => setProfile({...profile, slug: e.target.value})}
+                    required
+                  />
+                </div>
+                <p className="text-xs text-slate-500">Vaše adresa bude: salonio.cz/<strong>{profile.slug || 'vase-adresa'}</strong></p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefon</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input 
+                    id="phone" 
+                    className="pl-9"
+                    placeholder="+420 123 456 789" 
+                    value={profile.phone}
+                    onChange={e => setProfile({...profile, phone: e.target.value})}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="address">Adresa</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input 
+                    id="address" 
+                    className="pl-9"
+                    placeholder="Ulice 123, Město" 
+                    value={profile.address}
+                    onChange={e => setProfile({...profile, address: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="desc">Popis o nás</Label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <Input 
+                  id="desc"
+                  className="pl-9" 
+                  placeholder="Krátce o vašem salonu..." 
+                  value={profile.description}
+                  onChange={e => setProfile({...profile, description: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <Button type="submit" disabled={savingProfile}>
+              {savingProfile ? 'Ukládám...' : <><Save className="mr-2 h-4 w-4" /> Uložit profil</>}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 2. KARTA: OTEVÍRACÍ DOBA */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -140,8 +271,8 @@ export default function SettingsPage() {
             <div className="text-center py-8">
               <AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
               <p className="text-slate-600 mb-4">Zatím nemáte nastavenou otevírací dobu.</p>
-              <Button onClick={initializeHours} disabled={loading}>
-                {loading ? 'Pracuji...' : 'Vygenerovat standardní (Po-Pá 9-17)'}
+              <Button onClick={initializeHours} disabled={loadingHours}>
+                Vygenerovat standardní (Po-Pá 9-17)
               </Button>
             </div>
           ) : (
@@ -154,13 +285,13 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Label htmlFor={`closed-${day.id}`} className="text-xs text-slate-500">
+                    <Label htmlFor={`closed-${day.id}`} className="text-xs text-slate-500 md:hidden">
                       {day.is_closed ? 'Zavřeno' : 'Otevřeno'}
                     </Label>
                     <Switch 
                       id={`closed-${day.id}`}
                       checked={!day.is_closed}
-                      onCheckedChange={(checked: boolean) => handleSave(day.id, { is_closed: !checked })}
+                      onCheckedChange={(checked: boolean) => handleHoursSave(day.id, { is_closed: !checked })}
                     />
                   </div>
 
@@ -169,14 +300,14 @@ export default function SettingsPage() {
                       type="time" 
                       className="w-24" 
                       value={day.open_time?.slice(0,5)} 
-                      onChange={(e) => handleSave(day.id, { open_time: e.target.value })}
+                      onChange={(e) => handleHoursSave(day.id, { open_time: e.target.value })}
                     />
-                    <span className="text-slate-400">-</span>
+                    <span className="hidden md:inline text-slate-400">-</span>
                     <Input 
                       type="time" 
                       className="w-24"
                       value={day.close_time?.slice(0,5)}
-                      onChange={(e) => handleSave(day.id, { close_time: e.target.value })}
+                      onChange={(e) => handleHoursSave(day.id, { close_time: e.target.value })}
                     />
                   </div>
 
