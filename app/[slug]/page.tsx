@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { MapPin, Phone, Clock, Calendar as CalendarIcon, Check, ChevronRight, Star } from 'lucide-react'
+import { MapPin, Phone, Clock, Check, ChevronRight, Star, CalendarX } from 'lucide-react'
 
 // --- TYPY ---
 interface Service {
@@ -23,6 +23,13 @@ interface Profile {
   phone: string
 }
 
+interface BusinessHour {
+  day_of_week: number // 0 = Neděle, 1 = Pondělí...
+  open_time: string
+  close_time: string
+  is_closed: boolean
+}
+
 interface PageProps {
   params: Promise<{ slug: string }>
 }
@@ -30,54 +37,57 @@ interface PageProps {
 export default function SalonPublicPage({ params }: PageProps) {
   const { slug } = use(params)
 
+  // Data salonu
   const [profile, setProfile] = useState<Profile | null>(null)
   const [services, setServices] = useState<Service[]>([])
+  const [businessHours, setBusinessHours] = useState<BusinessHour[]>([])
+  
+  // Stavy načítání
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Rezervace
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>('')
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [bookingStep, setBookingStep] = useState<1 | 2>(1)
 
+  // Načtení dat
   useEffect(() => {
-    if (slug) {
-      fetchSalonData()
-    }
+    if (slug) fetchSalonData()
   }, [slug])
 
   const fetchSalonData = async () => {
     try {
       setLoading(true)
       
-      // OPRAVA: .maybeSingle() nevyhazuje 406 chybu, pokud salon neexistuje
+      // 1. Profil
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('slug', slug)
-        .maybeSingle() 
+        .maybeSingle()
 
-      if (profileError) {
-        console.error('Chyba DB:', profileError)
-        setError('Chyba databáze')
+      if (profileError || !profileData) {
+        setError(profileError ? 'Chyba databáze' : 'Salon nebyl nalezen')
         return
       }
-
-      if (!profileData) {
-        setError('Salon nebyl nalezen. Zkontrolujte URL adresu.')
-        return
-      }
-      
       setProfile(profileData)
 
-      // Načtení služeb
+      // 2. Služby
       const { data: servicesData } = await supabase
         .from('services')
         .select('*')
         .eq('user_id', profileData.id)
         .order('price', { ascending: true })
-
       setServices(servicesData || [])
+
+      // 3. Otevírací doba (NOVÉ)
+      const { data: hoursData } = await supabase
+        .from('business_hours')
+        .select('*')
+        .eq('user_id', profileData.id)
+      setBusinessHours(hoursData || [])
 
     } catch (err) {
       console.error(err)
@@ -87,23 +97,52 @@ export default function SalonPublicPage({ params }: PageProps) {
     }
   }
 
-  const timeSlots = [
-    "09:00", "09:30", "10:00", "10:30", "11:00", 
-    "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00"
-  ]
+  // --- LOGIKA GENERATORU ČASŮ ---
+  const getAvailableTimes = (dateString: string) => {
+    if (!dateString) return []
+
+    // 1. Zjistit den v týdnu (0-6)
+    const date = new Date(dateString)
+    const dayIndex = date.getDay() // 0 = Neděle
+
+    // 2. Najít pravidlo pro tento den
+    const rule = businessHours.find(h => h.day_of_week === dayIndex)
+
+    // 3. Pokud pravidlo neexistuje nebo je zavřeno -> vrátit prázdné pole
+    if (!rule || rule.is_closed) return []
+
+    // 4. Vygenerovat sloty od Open do Close
+    const slots = []
+    
+    // Převedeme časy na minuty (např. 09:00 -> 540 minut)
+    let [currentHour, currentMinute] = rule.open_time.split(':').map(Number)
+    const [endHour, endMinute] = rule.close_time.split(':').map(Number)
+    
+    let currentTimeInMinutes = currentHour * 60 + currentMinute
+    const endTimeInMinutes = endHour * 60 + endMinute
+    
+    // Interval slotů (např. 30 minut)
+    const interval = 30 
+
+    while (currentTimeInMinutes < endTimeInMinutes) {
+      // Zpět na formát HH:MM
+      const h = Math.floor(currentTimeInMinutes / 60).toString().padStart(2, '0')
+      const m = (currentTimeInMinutes % 60).toString().padStart(2, '0')
+      slots.push(`${h}:${m}`)
+
+      currentTimeInMinutes += interval
+    }
+
+    return slots
+  }
 
   const selectedService = services.find(s => s.id === selectedServiceId)
+  
+  // Dynamické časy pro vybraný den
+  const availableSlots = getAvailableTimes(selectedDate)
 
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Načítám salon...</div>
-  
-  if (error) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-800 p-4 text-center">
-      <h1 className="text-2xl font-bold mb-2">😕 {error}</h1>
-      <p className="text-slate-500 mb-4">Ujistěte se, že jste v Nastavení zadali správnou "Webovou adresu" (slug).</p>
-      <Button variant="outline" onClick={() => window.location.href = '/login'}>Přejít do Adminu</Button>
-    </div>
-  )
-
+  if (error) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-red-500">{error}</div>
   if (!profile) return null
 
   return (
@@ -116,12 +155,8 @@ export default function SalonPublicPage({ params }: PageProps) {
             <div>
               <h1 className="text-2xl font-bold text-slate-900">{profile.salon_name || 'Krásný Salon'}</h1>
               <div className="flex flex-col sm:flex-row sm:items-center text-sm text-slate-500 mt-1 gap-1 sm:gap-4">
-                {profile.address && (
-                  <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.address}</span>
-                )}
-                {profile.phone && (
-                  <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {profile.phone}</span>
-                )}
+                {profile.address && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {profile.address}</span>}
+                {profile.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" /> {profile.phone}</span>}
               </div>
             </div>
             <div className="hidden sm:flex flex-col items-end">
@@ -199,24 +234,34 @@ export default function SalonPublicPage({ params }: PageProps) {
                      type="date" 
                      className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-slate-900 focus:outline-none"
                      min={new Date().toISOString().split('T')[0]} 
-                     onChange={(e) => setSelectedDate(e.target.value)}
+                     onChange={(e) => {
+                       setSelectedDate(e.target.value)
+                       setSelectedTime(null) // Reset času při změně data
+                     }}
                    />
+                   <p className="text-xs text-slate-400">Dostupnost se načítá dle otevírací doby.</p>
                  </div>
 
                  <div>
                     <label className="block text-sm font-medium text-slate-700 mb-3">Dostupné časy</label>
+                    
                     {!selectedDate ? (
                       <div className="text-sm text-slate-400 italic">Nejdříve vyberte datum vlevo.</div>
+                    ) : availableSlots.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed">
+                        <CalendarX className="h-8 w-8 mb-2 opacity-50" />
+                        <p>V tento den má salon zavřeno.</p>
+                      </div>
                     ) : (
-                      <div className="grid grid-cols-3 gap-2">
-                        {timeSlots.map((time) => (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 h-64 overflow-y-auto pr-2 custom-scrollbar">
+                        {availableSlots.map((time) => (
                           <button
                             key={time}
                             onClick={() => setSelectedTime(time)}
-                            className={`py-2 px-1 text-sm rounded-md transition-colors ${
+                            className={`py-2 px-1 text-sm rounded-md transition-colors border ${
                               selectedTime === time 
-                                ? 'bg-slate-900 text-white font-medium' 
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                ? 'bg-slate-900 text-white border-slate-900 font-medium' 
+                                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'
                             }`}
                           >
                             {time}
@@ -251,7 +296,7 @@ export default function SalonPublicPage({ params }: PageProps) {
                 disabled={!selectedDate || !selectedTime} 
                 size="lg" 
                 className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => alert('Skvělé! V příštím kroku dokončíme rezervaci.')}
+                onClick={() => alert(`Rezervace: ${selectedDate} v ${selectedTime}`)}
               >
                 Dokončit rezervaci
               </Button>
