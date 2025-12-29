@@ -1,3 +1,5 @@
+// app/login/page.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -64,16 +66,15 @@ export default function AuthPage() {
     setLoading(true)
 
     try {
-      // Supabase pošle email s odkazem, který uživatele přihlásí a přesměruje na tuto URL
-      // Tam si pak uživatel nastaví nové heslo (to přidáme do Nastavení)
+      // Supabase pošle email s odkazem.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/dashboard/settings`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings`,
       })
 
       if (error) throw error
 
       toast.success('Odkaz pro obnovu hesla byl odeslán na váš email.')
-      setView('auth') // Návrat na login
+      setView('auth') // Návrat na login, aby uživatel věděl, co dál
 
     } catch (error: any) {
       toast.error(error.message)

@@ -9,14 +9,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Clock, AlertCircle, Store, Globe, MapPin, Phone, FileText, Save, Upload, Image as ImageIcon, RefreshCw } from 'lucide-react'
+import { Clock, AlertCircle, Store, Globe, MapPin, Phone, FileText, Save, Upload, Image as ImageIcon, RefreshCw, Lock } from 'lucide-react'
 import { toast } from "sonner"
 
-// --- KONFIGURACE (VAŠE NASTAVENÍ) ---
-// 0 = Pondělí, 1 = Úterý ... 6 = Neděle
+// --- KONFIGURACE ---
 const DAYS = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle']
 
-// Generování časů (07:00 - 21:00 po 5 minutách)
+// Generátor časů po 5 minutách (07:00 - 21:00)
 const generateTimeOptions = (step = 5) => {
   const times = []
   for (let h = 7; h < 21; h++) {
@@ -62,6 +61,10 @@ export default function SettingsPage() {
   const [loadingProfile, setLoadingProfile] = useState(true)
   const [savingProfile, setSavingProfile] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+
+  // Stavy pro změnu hesla
+  const [newPassword, setNewPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -115,9 +118,7 @@ export default function SettingsPage() {
       setUploadingLogo(true)
       const loadingToast = toast.loading("Nahrávám logo...")
       
-      if (!e.target.files || e.target.files.length === 0) {
-        throw new Error('Nevybrali jste žádný soubor.')
-      }
+      if (!e.target.files || e.target.files.length === 0) throw new Error('Nevybrali jste žádný soubor.')
 
       const file = e.target.files[0]
       const fileExt = file.name.split('.').pop()
@@ -144,7 +145,6 @@ export default function SettingsPage() {
       if (updateError) throw updateError
 
       setProfile(prev => ({ ...prev, logo_url: publicUrl }))
-      
       toast.dismiss(loadingToast)
       toast.success('Logo bylo úspěšně nahráno!')
 
@@ -159,7 +159,6 @@ export default function SettingsPage() {
   const handleProfileSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingProfile(true)
-    
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
@@ -184,7 +183,6 @@ export default function SettingsPage() {
         toast.success('Profil byl úspěšně uložen.')
         setProfile(prev => ({ ...prev, slug: formattedSlug }))
       }
-
     } catch (error: any) {
       toast.error('Chyba: ' + error.message)
     } finally {
@@ -192,19 +190,29 @@ export default function SettingsPage() {
     }
   }
 
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingPassword(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      toast.success('Heslo bylo úspěšně změněno.')
+      setNewPassword('')
+    } catch (error: any) {
+      toast.error('Chyba: ' + error.message)
+    } finally {
+      setSavingPassword(false)
+    }
+  }
+
   const initializeHours = async () => {
     try {
       setLoadingHours(true)
       setHours([]) 
-      
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { error: deleteError } = await supabase
-        .from('business_hours')
-        .delete()
-        .eq('user_id', user.id)
-      
+      const { error: deleteError } = await supabase.from('business_hours').delete().eq('user_id', user.id)
       if (deleteError) throw deleteError
 
       const defaultHours = Array.from({ length: 7 }, (_, i) => ({
@@ -212,18 +220,14 @@ export default function SettingsPage() {
         day_of_week: i,
         open_time: '09:00',
         close_time: '17:00',
-        is_closed: i === 5 || i === 6 // Sobota a Neděle (indexy 5 a 6) zavřeno
+        is_closed: i === 5 || i === 6
       }))
 
-      const { error: insertError } = await supabase
-        .from('business_hours')
-        .insert(defaultHours)
-
+      const { error: insertError } = await supabase.from('business_hours').insert(defaultHours)
       if (insertError) throw insertError
 
       toast.success("Otevírací doba byla resetována.")
       await fetchData()
-
     } catch (error: any) {
       toast.error('Chyba: ' + error.message)
     } finally {
@@ -234,12 +238,8 @@ export default function SettingsPage() {
   const handleHoursSave = async (id: string, updates: Partial<BusinessHour>) => {
     setSavingHours(true)
     setHours(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h))
-    
     const { error } = await supabase.from('business_hours').update(updates).eq('id', id)
-    
-    if (error) {
-        toast.error("Nepodařilo se uložit otevírací dobu.")
-    }
+    if (error) toast.error("Nepodařilo se uložit otevírací dobu.")
     setSavingHours(false)
   }
 
@@ -252,86 +252,34 @@ export default function SettingsPage() {
       {/* 1. KARTA: PROFIL */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Store className="h-5 w-5" /> Veřejný Profil
-          </CardTitle>
+          <CardTitle className="flex items-center gap-2"><Store className="h-5 w-5" /> Veřejný Profil</CardTitle>
           <CardDescription>Tyto informace uvidí vaši zákazníci na webu.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleProfileSave} className="space-y-6">
-            
-            {/* LOGO */}
             <div className="flex flex-col sm:flex-row items-center gap-6 p-4 bg-slate-50 rounded-lg border border-dashed">
               <div className="relative h-24 w-24 shrink-0">
-                {profile.logo_url ? (
-                  <img src={profile.logo_url} alt="Logo" className="h-full w-full rounded-full object-cover border-2 border-white shadow-sm" />
-                ) : (
-                  <div className="h-full w-full rounded-full bg-slate-200 flex items-center justify-center text-slate-400">
-                    <ImageIcon className="h-8 w-8" />
-                  </div>
-                )}
+                {profile.logo_url ? <img src={profile.logo_url} alt="Logo" className="h-full w-full rounded-full object-cover border-2 border-white shadow-sm" /> : <div className="h-full w-full rounded-full bg-slate-200 flex items-center justify-center text-slate-400"><ImageIcon className="h-8 w-8" /></div>}
                 {uploadingLogo && <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center text-white text-xs">...</div>}
               </div>
               <div className="flex-1 text-center sm:text-left space-y-2">
                 <h3 className="font-medium text-slate-900">Logo Salonu</h3>
-                <p className="text-xs text-slate-500">Doporučujeme čtvercový obrázek (PNG, JPG).</p>
-                <div className="flex justify-center sm:justify-start">
-                  <Label htmlFor="logo-upload" className="cursor-pointer">
-                    <div className="flex items-center gap-2 bg-white border px-3 py-2 rounded-md text-sm hover:bg-slate-50 transition-colors shadow-sm">
-                      <Upload className="h-4 w-4" /> {uploadingLogo ? 'Nahrávám...' : 'Nahrát nové logo'}
-                    </div>
-                    <Input id="logo-upload" type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
-                  </Label>
-                </div>
+                <Label htmlFor="logo-upload" className="cursor-pointer inline-flex items-center gap-2 bg-white border px-3 py-2 rounded-md text-sm hover:bg-slate-50 transition-colors shadow-sm">
+                  <Upload className="h-4 w-4" /> {uploadingLogo ? 'Nahrávám...' : 'Nahrát nové logo'}
+                  <Input id="logo-upload" type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                </Label>
               </div>
             </div>
-
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="salonName">Název Salonu</Label>
-                <div className="relative">
-                  <Store className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input id="salonName" className="pl-9" placeholder="Např. Kadeřnictví Jana" value={profile.salon_name} onChange={e => setProfile({...profile, salon_name: e.target.value})} required />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="slug">Webová adresa (URL)</Label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input id="slug" className="pl-9" placeholder="např. kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required />
-                </div>
-                <p className="text-xs text-slate-500">Adresa: salonio.cz/<strong>{profile.slug || '...'}</strong></p>
-              </div>
+              <div className="space-y-2"><Label>Název Salonu</Label><Input className="pl-3" placeholder="Např. Kadeřnictví Jana" value={profile.salon_name} onChange={e => setProfile({...profile, salon_name: e.target.value})} required /></div>
+              <div className="space-y-2"><Label>Webová adresa (URL)</Label><Input className="pl-3" placeholder="kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required /><p className="text-xs text-slate-500">Adresa: salonio.cz/<strong>{profile.slug}</strong></p></div>
             </div>
-
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Telefon</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input id="phone" className="pl-9" placeholder="+420 123 456 789" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Adresa</Label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input id="address" className="pl-9" placeholder="Ulice 123, Město" value={profile.address} onChange={e => setProfile({...profile, address: e.target.value})} />
-                </div>
-              </div>
+              <div className="space-y-2"><Label>Telefon</Label><Input className="pl-3" placeholder="+420 123 456 789" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Adresa</Label><Input className="pl-3" placeholder="Ulice 123" value={profile.address} onChange={e => setProfile({...profile, address: e.target.value})} /></div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="desc">Popis</Label>
-              <div className="relative">
-                <FileText className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <Input id="desc" className="pl-9" placeholder="Krátce o vás..." value={profile.description} onChange={e => setProfile({...profile, description: e.target.value})} />
-              </div>
-            </div>
-
-            <Button type="submit" disabled={savingProfile}>
-              {savingProfile ? 'Ukládám...' : <><Save className="mr-2 h-4 w-4" /> Uložit profil</>}
-            </Button>
+            <div className="space-y-2"><Label>Popis</Label><Input className="pl-3" placeholder="O nás..." value={profile.description} onChange={e => setProfile({...profile, description: e.target.value})} /></div>
+            <Button type="submit" disabled={savingProfile}>{savingProfile ? 'Ukládám...' : 'Uložit profil'}</Button>
           </form>
         </CardContent>
       </Card>
@@ -340,62 +288,37 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Otevírací doba</CardTitle>
-              <CardDescription>Nastavte, kdy si mohou klienti rezervovat termíny.</CardDescription>
-            </div>
-            {hours.length > 0 && (
-              <Button variant="outline" size="sm" onClick={initializeHours} disabled={loadingHours}>
-                <RefreshCw className="h-4 w-4 mr-2" /> Resetovat
-              </Button>
-            )}
+            <div><CardTitle className="flex items-center gap-2"><Clock className="h-5 w-5" /> Otevírací doba</CardTitle></div>
+            {hours.length > 0 && <Button variant="outline" size="sm" onClick={initializeHours} disabled={loadingHours}><RefreshCw className="h-4 w-4 mr-2" /> Resetovat</Button>}
           </div>
         </CardHeader>
         <CardContent>
-          {hours.length === 0 ? (
-            <div className="text-center py-8">
-              <AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" />
-              <Button onClick={initializeHours} disabled={loadingHours}>Vygenerovat standardní</Button>
-            </div>
-          ) : (
+          {hours.length === 0 ? <div className="text-center py-8"><AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" /><Button onClick={initializeHours} disabled={loadingHours}>Vygenerovat standardní</Button></div> : 
             <div className="space-y-4">
-              {/* Zde vypisujeme dny přímo, jak přijdou z DB (0=Pondělí) */}
               {hours.map((day) => (
                 <div key={day.id} className={`flex items-center justify-between p-3 rounded-lg border ${day.is_closed ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}>
                   <div className="w-24 font-medium text-slate-700">{DAYS[day.day_of_week]}</div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor={`closed-${day.id}`} className="text-xs text-slate-500 md:hidden">{day.is_closed ? 'Zavřeno' : 'Otevřeno'}</Label>
-                    <Switch id={`closed-${day.id}`} checked={!day.is_closed} onCheckedChange={(checked: boolean) => handleHoursSave(day.id, { is_closed: !checked })} />
-                  </div>
-                  
-                  {/* SELECT S 5min intervalem */}
-                  <div className={`flex items-center gap-2 transition-opacity ${day.is_closed ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
-                    <select
-                      className="flex h-10 w-24 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={day.open_time?.slice(0,5)}
-                      onChange={(e) => handleHoursSave(day.id, { open_time: e.target.value })}
-                    >
-                      {TIME_OPTIONS.map((time) => (
-                        <option key={`open-${day.id}-${time}`} value={time}>{time}</option>
-                      ))}
-                    </select>
-                    
-                    <span className="hidden md:inline text-slate-400">-</span>
-                    
-                    <select
-                      className="flex h-10 w-24 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                      value={day.close_time?.slice(0,5)}
-                      onChange={(e) => handleHoursSave(day.id, { close_time: e.target.value })}
-                    >
-                      {TIME_OPTIONS.map((time) => (
-                        <option key={`close-${day.id}-${time}`} value={time}>{time}</option>
-                      ))}
-                    </select>
+                  <div className="flex items-center gap-2"><Label className="text-xs text-slate-500 md:hidden">{day.is_closed ? 'Zavřeno' : 'Otevřeno'}</Label><Switch checked={!day.is_closed} onCheckedChange={(checked) => handleHoursSave(day.id, { is_closed: !checked })} /></div>
+                  <div className={`flex items-center gap-2 ${day.is_closed ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
+                    <select className="flex h-10 w-24 rounded-md border bg-background px-3 py-2 text-sm" value={day.open_time?.slice(0,5)} onChange={(e) => handleHoursSave(day.id, { open_time: e.target.value })}>{TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}</select>
+                    <span>-</span>
+                    <select className="flex h-10 w-24 rounded-md border bg-background px-3 py-2 text-sm" value={day.close_time?.slice(0,5)} onChange={(e) => handleHoursSave(day.id, { close_time: e.target.value })}>{TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}</select>
                   </div>
                 </div>
               ))}
             </div>
-          )}
+          }
+        </CardContent>
+      </Card>
+
+      {/* 3. KARTA: ZABEZPEČENÍ */}
+      <Card>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Lock className="h-5 w-5" /> Zabezpečení</CardTitle><CardDescription>Změňte si heslo k účtu.</CardDescription></CardHeader>
+        <CardContent>
+          <form onSubmit={handlePasswordUpdate} className="space-y-4 max-w-sm">
+            <div className="space-y-2"><Label>Nové heslo</Label><Input type="password" placeholder="******" value={newPassword} onChange={e => setNewPassword(e.target.value)} required minLength={6} /></div>
+            <Button type="submit" disabled={savingPassword}>{savingPassword ? 'Ukládám...' : 'Změnit heslo'}</Button>
+          </form>
         </CardContent>
       </Card>
     </div>
