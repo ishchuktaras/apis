@@ -6,10 +6,10 @@ import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trash2, Plus, Clock, Banknote } from 'lucide-react' // Ikony
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Trash2, Plus, Clock, Banknote } from 'lucide-react'
+import { toast } from "sonner"
 
-// Definice typu pro Službu (podle SQL tabulky)
 interface Service {
   id: string
   title: string
@@ -25,7 +25,6 @@ export default function ServicesPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
 
-  // Formulářová data
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -33,7 +32,6 @@ export default function ServicesPage() {
     duration: '30'
   })
 
-  // 1. Načtení služeb při startu
   useEffect(() => {
     fetchServices()
   }, [])
@@ -41,7 +39,6 @@ export default function ServicesPage() {
   const fetchServices = async () => {
     try {
       setLoading(true)
-      // Získáme aktuálního uživatele
       const { data: { user } } = await supabase.auth.getUser()
       
       if (!user) {
@@ -49,23 +46,24 @@ export default function ServicesPage() {
         return
       }
 
-      // Stáhneme služby z databáze
+      // --- OPRAVA BEZPEČNOSTI ---
+      // Musíme explicitně filtrovat služby podle ID přihlášeného uživatele
       const { data, error } = await supabase
         .from('services')
         .select('*')
+        .eq('user_id', user.id) // <--- TOTO JE KLÍČOVÉ!
         .order('created_at', { ascending: false })
 
       if (error) throw error
       setServices(data || [])
 
-    } catch (error) {
-      console.error('Chyba při načítání:', error)
+    } catch (error: any) {
+      toast.error('Chyba při načítání: ' + error.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // 2. Přidání nové služby
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -85,18 +83,17 @@ export default function ServicesPage() {
 
       if (error) throw error
 
-      // Reset formuláře a obnovení seznamu
       setFormData({ title: '', description: '', price: '', duration: '30' })
       fetchServices()
+      toast.success('Služba přidána')
 
     } catch (error: any) {
-      alert('Chyba při ukládání: ' + error.message)
+      toast.error('Chyba: ' + error.message)
     } finally {
       setSubmitting(false)
     }
   }
 
-  // 3. Smazání služby
   const handleDelete = async (id: string) => {
     if (!confirm('Opravdu chcete tuto službu smazat?')) return
 
@@ -104,10 +101,10 @@ export default function ServicesPage() {
       const { error } = await supabase.from('services').delete().eq('id', id)
       if (error) throw error
       
-      // Odstraníme položku lokálně (rychlejší než nový fetch)
       setServices(services.filter(service => service.id !== id))
+      toast.success('Služba smazána')
     } catch (error: any) {
-      alert('Chyba: ' + error.message)
+      toast.error('Chyba: ' + error.message)
     }
   }
 
@@ -117,7 +114,7 @@ export default function ServicesPage() {
 
       <div className="grid gap-8 md:grid-cols-[350px_1fr]">
         
-        {/* LEVÁ ČÁST: Formulář pro přidání */}
+        {/* Formulář */}
         <div>
           <Card>
             <CardHeader>
@@ -162,10 +159,10 @@ export default function ServicesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="desc">Krátký popis (volitelné)</Label>
+                  <Label htmlFor="desc">Krátký popis</Label>
                   <Input 
                     id="desc" 
-                    placeholder="Včetně mytí a stylingu..." 
+                    placeholder="Včetně mytí..." 
                     value={formData.description}
                     onChange={e => setFormData({...formData, description: e.target.value})}
                   />
@@ -179,7 +176,7 @@ export default function ServicesPage() {
           </Card>
         </div>
 
-        {/* PRAVÁ ČÁST: Seznam služeb */}
+        {/* Seznam služeb */}
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-slate-700">Vaše nabídka ({services.length})</h2>
           
@@ -187,10 +184,10 @@ export default function ServicesPage() {
             <p className="text-muted-foreground">Načítám služby...</p>
           ) : services.length === 0 ? (
             <div className="text-center p-8 border-2 border-dashed rounded-lg text-muted-foreground">
-              Zatím nemáte žádné služby. Přidejte první vlevo.
+              Zatím nemáte žádné služby.
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               {services.map((service) => (
                 <Card key={service.id} className="relative group hover:shadow-md transition-shadow">
                   <CardHeader className="pb-2">
