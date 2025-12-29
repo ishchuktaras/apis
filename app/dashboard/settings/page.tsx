@@ -1,5 +1,3 @@
-// app/dashboard/settings/page.tsx
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -13,7 +11,8 @@ import { Clock, AlertCircle, Store, Globe, MapPin, Phone, FileText, Save, Upload
 import { toast } from "sonner"
 
 // --- KONFIGURACE ---
-const DAYS = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle']
+// DŮLEŽITÉ: Musí začínat Nedělí (index 0), aby sedělo s Date.getDay() v JavaScriptu
+const DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota']
 
 // Generátor časů po 5 minutách (07:00 - 21:00)
 const generateTimeOptions = (step = 5) => {
@@ -97,7 +96,7 @@ export default function SettingsPage() {
       }
       setLoadingProfile(false)
 
-      // 2. Otevírací doba
+      // 2. Otevírací doba (Filtrováno dle user_id)
       const { data: hoursData } = await supabase
         .from('business_hours')
         .select('*')
@@ -215,12 +214,13 @@ export default function SettingsPage() {
       const { error: deleteError } = await supabase.from('business_hours').delete().eq('user_id', user.id)
       if (deleteError) throw deleteError
 
+      // Generujeme Po-Ne (Víkend 0=Ne a 6=So zavřeno)
       const defaultHours = Array.from({ length: 7 }, (_, i) => ({
         user_id: user.id,
         day_of_week: i,
         open_time: '09:00',
         close_time: '17:00',
-        is_closed: i === 5 || i === 6
+        is_closed: i === 0 || i === 6 // Neděle (0) a Sobota (6) zavřeno
       }))
 
       const { error: insertError } = await supabase.from('business_hours').insert(defaultHours)
@@ -244,6 +244,15 @@ export default function SettingsPage() {
   }
 
   if (loadingProfile && loadingHours) return <div className="p-8 text-center">Načítám...</div>
+
+  // Řazení pro zobrazení: Chceme zobrazit Pondělí (1) první, Neděli (0) poslední.
+  // Vytvoříme kopii a seřadíme ji.
+  const sortedHours = [...hours].sort((a, b) => {
+    // Pokud je den 0 (Neděle), bereme ho jako 7 pro účely řazení
+    const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
+    const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
+    return dayA - dayB
+  })
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-10">
@@ -295,7 +304,8 @@ export default function SettingsPage() {
         <CardContent>
           {hours.length === 0 ? <div className="text-center py-8"><AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" /><Button onClick={initializeHours} disabled={loadingHours}>Vygenerovat standardní</Button></div> : 
             <div className="space-y-4">
-              {hours.map((day) => (
+              {/* Použijeme sortedHours, aby Pondělí bylo první */}
+              {sortedHours.map((day) => (
                 <div key={day.id} className={`flex items-center justify-between p-3 rounded-lg border ${day.is_closed ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}>
                   <div className="w-24 font-medium text-slate-700">{DAYS[day.day_of_week]}</div>
                   <div className="flex items-center gap-2"><Label className="text-xs text-slate-500 md:hidden">{day.is_closed ? 'Zavřeno' : 'Otevřeno'}</Label><Switch checked={!day.is_closed} onCheckedChange={(checked) => handleHoursSave(day.id, { is_closed: !checked })} /></div>

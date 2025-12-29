@@ -1,5 +1,3 @@
-// app/login/page.tsx
-
 'use client'
 
 import { useState } from 'react'
@@ -13,6 +11,34 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Scissors, CheckCircle, Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
 import { toast } from "sonner"
 
+// --- OPRAVA: Komponenta definovaná MIMO hlavní funkci ---
+// Tím zabráníme jejímu neustálému znovuvytváření a ztrátě fokusu.
+const PasswordInput = ({ id, value, onChange }: any) => {
+  const [showPassword, setShowPassword] = useState(false)
+
+  return (
+    <div className="relative">
+      <Input 
+        id={id} 
+        type={showPassword ? "text" : "password"} 
+        value={value} 
+        onChange={onChange} 
+        required 
+        minLength={6}
+        className="pr-10" 
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+        tabIndex={-1}
+      >
+        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  )
+}
+
 export default function AuthPage() {
   const router = useRouter()
   
@@ -22,8 +48,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   
   // UX Stavy
-  const [showPassword, setShowPassword] = useState(false) // Přepínač viditelnosti hesla
-  const [view, setView] = useState<'auth' | 'reset'>('auth') // Přepínač mezi Loginem a Resetem
+  const [view, setView] = useState<'auth' | 'reset'>('auth') 
 
   // --- 1. PŘIHLÁŠENÍ ---
   const handleLogin = async (e: React.FormEvent) => {
@@ -66,7 +91,6 @@ export default function AuthPage() {
     setLoading(true)
 
     try {
-      // Supabase pošle email s odkazem.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings`,
       })
@@ -74,7 +98,7 @@ export default function AuthPage() {
       if (error) throw error
 
       toast.success('Odkaz pro obnovu hesla byl odeslán na váš email.')
-      setView('auth') // Návrat na login, aby uživatel věděl, co dál
+      setView('auth') 
 
     } catch (error: any) {
       toast.error(error.message)
@@ -82,29 +106,6 @@ export default function AuthPage() {
       setLoading(false)
     }
   }
-
-  // Komponenta pro input hesla s okem
-  const PasswordInput = ({ id, value, onChange }: any) => (
-    <div className="relative">
-      <Input 
-        id={id} 
-        type={showPassword ? "text" : "password"} 
-        value={value} 
-        onChange={onChange} 
-        required 
-        minLength={6}
-        className="pr-10" // Místo pro ikonku
-      />
-      <button
-        type="button"
-        onClick={() => setShowPassword(!showPassword)}
-        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
-        tabIndex={-1}
-      >
-        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    </div>
-  )
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
@@ -186,6 +187,7 @@ export default function AuthPage() {
                       Zapomněli jste heslo?
                     </button>
                   </div>
+                  {/* Použití komponenty */}
                   <PasswordInput 
                     id="pass-login" 
                     value={password} 

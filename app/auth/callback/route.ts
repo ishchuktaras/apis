@@ -1,17 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
-import { type EmailOtpType } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const token_hash = searchParams.get('token_hash')
-  const type = searchParams.get('type') as EmailOtpType | null
-  // Kam přesměrovat po úspěšném přihlášení (defaultně /dashboard)
+  // Získáme parametry z URL
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get('code')
+  
+  // "next" parametr určuje, kam přesměrovat po přihlášení (např. /dashboard/settings)
   const next = searchParams.get('next') ?? '/dashboard'
 
-  if (token_hash && type) {
-    // OPRAVA PRO NEXT.JS 15: Musíme použít 'await'
+  if (code) {
     const cookieStore = await cookies()
 
     const supabase = createServerClient(
@@ -31,20 +30,22 @@ export async function GET(request: Request) {
       }
     )
 
-    // Ověření jednorázového kódu (tokenu)
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash,
-    })
+    // Vyměníme jednorázový kód za Session (přihlášení)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
-      // Token je platný, uživatel je přihlášen -> přesměrujeme ho
-      // Důležité: Odstraňujeme token z URL pro čistotu a bezpečnost
-      return NextResponse.redirect(new URL(next, request.url))
+      // Vytvoříme přesměrování na cílovou stránku
+      // DŮLEŽITÉ: Používáme 'origin' z requestu, abychom zůstali na stejné doméně
+      const forwardedUrl = new URL(next, origin)
+      
+      // Odstraníme 'code' z URL, aby to bylo čisté
+      forwardedUrl.searchParams.delete('code')
+
+      return NextResponse.redirect(forwardedUrl)
     }
   }
 
-  // Pokud je token neplatný nebo expirovaný, přesměrujeme na chybovou stránku nebo login
-  // (Můžete přesměrovat i na '/login?error=invalid_token')
-  return NextResponse.redirect(new URL('/login?error=auth_code_error', request.url))
+  // Pokud se něco pokazí, vrátíme uživatele na přihlašovací stránku s chybou
+  // (místo /auth/auth-code-error, která možná neexistuje)
+  return NextResponse.redirect(new URL('/login?error=auth_code_error', origin))
 }
