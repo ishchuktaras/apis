@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
-import { MapPin, Phone, Check, ChevronRight, Star, User, Mail, Smartphone, ArrowLeft, Scissors, ExternalLink, Clock } from 'lucide-react'
+import { MapPin, Phone, Check, ChevronRight, Star, User, Mail, Smartphone, ArrowLeft, Scissors, Clock, Calendar, Info } from 'lucide-react'
 import { toast } from "sonner"
+import Link from 'next/link'
 
 // --- TYPY ---
 interface Service {
@@ -35,7 +36,6 @@ interface BusinessHour {
   is_closed: boolean
 }
 
-// Přidán interface pro rezervaci
 interface BookingSlot {
   start_time: string
 }
@@ -134,7 +134,6 @@ export default function SalonPublicPage({ params }: PageProps) {
         .neq('status', 'cancelled')
 
       if (data) {
-        // Použití správného typu místo any
         const times = (data as BookingSlot[]).map(b => b.start_time.slice(0, 5))
         setBookedTimes(times)
       }
@@ -157,7 +156,6 @@ export default function SalonPublicPage({ params }: PageProps) {
 
     if (!rule || rule.is_closed) return []
 
-    // Logika pro "Dnes"
     const now = new Date()
     const todayString = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const isToday = dateString === todayString
@@ -170,11 +168,10 @@ export default function SalonPublicPage({ params }: PageProps) {
     let slotTimeInMinutes = currentHour * 60 + currentMinute
     const endTimeInMinutes = endHour * 60 + endMinute
     
-    // Interval pro klienty - ZMĚNA NA 15 MIN PRO VĚTŠÍ FLEXIBILITU
     const interval = 15 
 
     while (slotTimeInMinutes < endTimeInMinutes) {
-      if (isToday && slotTimeInMinutes < currentMinutesTotal + 30) { // 30 min rezerva pro dnešek
+      if (isToday && slotTimeInMinutes < currentMinutesTotal + 30) { 
          slotTimeInMinutes += interval
          continue
       }
@@ -217,30 +214,26 @@ export default function SalonPublicPage({ params }: PageProps) {
 
       if (error) throw error
 
-      // Odeslání emailu (Zde by v produkci mělo být volání API endpointu, který řeší i validaci)
-      // Pro MVP používáme existující route
       const cancelLink = `${window.location.origin}/booking/${bookingData.id}/cancel`
+      const emailHtml = generateEmailHtml(
+        clientInfo.name,
+        profile.salon_name,
+        selectedDate,
+        selectedTime,
+        selectedService?.title || 'Služba',
+        selectedService?.price || 0,
+        cancelLink,
+        profile.address || 'Adresa neuvedena'
+      )
 
+      // Odeslání emailu
       await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: 'ishchuktaras@gmail.com', // V produkci: clientInfo.email (a kopie majiteli)
+          to: 'ishchuktaras@gmail.com', // PRO DEMO - v produkci: clientInfo.email
           subject: `Rezervace potvrzena: ${profile.salon_name}`,
-          html: `
-            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
-              <h1 style="color: #1a1a1a;">Potvrzení rezervace 🎉</h1>
-              <p>Dobrý den, <strong>${clientInfo.name}</strong>,</p>
-              <p>Vaše rezervace v salonu <strong>${profile.salon_name}</strong> byla úspěšně vytvořena.</p>
-              <div style="background: #F8F5E6; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #e2e8f0;">
-                <p style="margin: 5px 0;"><strong>Datum:</strong> ${selectedDate}</p>
-                <p style="margin: 5px 0;"><strong>Čas:</strong> ${selectedTime}</p>
-                <p style="margin: 5px 0;"><strong>Služba:</strong> ${selectedService?.title} (${selectedService?.price} Kč)</p>
-              </div>
-              <p>Pokud se nemůžete dostavit, klikněte na tlačítko níže:</p>
-              <a href="${cancelLink}" style="display: inline-block; background: #ef4444; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Zrušit rezervaci</a>
-            </div>
-          `
+          html: emailHtml
         })
       })
 
@@ -257,30 +250,51 @@ export default function SalonPublicPage({ params }: PageProps) {
   const selectedService = services.find(s => s.id === selectedServiceId)
   const availableSlots = getAvailableTimes(selectedDate)
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground animate-pulse">Načítám salon...</div>
-  if (error) return <div className="min-h-screen flex items-center justify-center bg-background text-destructive font-medium">{error}</div>
+  // LOADING STATE (Skeleton)
+  if (loading) return (
+    <div className="min-h-screen bg-background pb-20 font-sans">
+      <header className="bg-card border-b p-4"><div className="h-16 w-16 bg-muted rounded-full animate-pulse mx-auto mb-2"></div><div className="h-6 w-48 bg-muted rounded animate-pulse mx-auto"></div></header>
+      <main className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+        {[1,2,3].map(i => <div key={i} className="h-24 bg-card rounded-xl border shadow-sm animate-pulse"></div>)}
+      </main>
+    </div>
+  )
+
+  if (error) return <div className="min-h-screen flex flex-col items-center justify-center bg-background text-destructive font-medium p-4 text-center"><Info className="h-10 w-10 mb-4"/>{error}<Link href="/" className="mt-4 text-primary underline">Zpět na hlavní stránku</Link></div>
   if (!profile) return null
 
   // --- KROK 4: DĚKOVAČKA ---
   if (bookingStep === 4) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center p-8 border-none shadow-lg animate-in zoom-in-95 duration-300">
-          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6 text-green-600">
-            <Check className="h-8 w-8" />
+        <Card className="max-w-md w-full text-center p-8 border-none shadow-xl animate-in zoom-in-95 duration-300 bg-white">
+          <div className="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6 text-green-600 shadow-sm">
+            <Check className="h-10 w-10" />
           </div>
           <h2 className="text-2xl font-bold text-foreground mb-2">Rezervace odeslána!</h2>
           <p className="text-muted-foreground mb-8">
             Děkujeme, <strong>{clientInfo.name}</strong>. Potvrzení vám dorazí na e-mail.
           </p>
-          <div className="bg-muted/30 p-6 rounded-lg text-left mb-8 text-sm text-foreground space-y-3 border">
-            <p><strong>Datum:</strong> {selectedDate}</p>
-            <p><strong>Čas:</strong> {selectedTime}</p>
-            <p><strong>Služba:</strong> {selectedService?.title}</p>
-            <p><strong>Salon:</strong> {profile.salon_name}</p>
+          <div className="bg-slate-50 p-6 rounded-lg text-left mb-8 text-sm text-foreground space-y-3 border border-slate-100">
+            <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-muted-foreground">Datum</span>
+                <span className="font-medium">{selectedDate}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-muted-foreground">Čas</span>
+                <span className="font-medium">{selectedTime}</span>
+            </div>
+            <div className="flex justify-between border-b border-slate-200 pb-2">
+                <span className="text-muted-foreground">Služba</span>
+                <span className="font-medium">{selectedService?.title}</span>
+            </div>
+            <div className="flex justify-between pt-1">
+                <span className="text-muted-foreground">Salon</span>
+                <span className="font-medium">{profile.salon_name}</span>
+            </div>
           </div>
-          <Button onClick={() => window.location.reload()} variant="outline" className="w-full h-12">
-            Zpět na stránku salonu
+          <Button onClick={() => window.location.reload()} variant="outline" className="w-full h-12 border-slate-300 hover:bg-slate-50 text-slate-700">
+            Nová rezervace
           </Button>
         </Card>
       </div>
@@ -288,10 +302,10 @@ export default function SalonPublicPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-28 md:pb-20 font-sans selection:bg-primary/20">
+    <div className="min-h-screen bg-slate-50/50 pb-32 md:pb-24 font-sans selection:bg-primary/20">
       
       {/* HEADER */}
-      <header className="bg-card border-b sticky top-0 z-10 shadow-sm/50 backdrop-blur-sm bg-white/90 supports-[backdrop-filter]:bg-white/50">
+      <header className="bg-white border-b sticky top-0 z-10 shadow-sm/50 backdrop-blur-sm bg-white/90 supports-[backdrop-filter]:bg-white/50">
         <div className="max-w-3xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             
@@ -300,19 +314,19 @@ export default function SalonPublicPage({ params }: PageProps) {
                 <img 
                   src={profile.logo_url} 
                   alt={profile.salon_name} 
-                  className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border border-border shadow-sm"
+                  className="w-12 h-12 md:w-16 md:h-16 rounded-full object-cover border border-slate-200 shadow-sm bg-white"
                 />
               ) : (
-                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-secondary flex items-center justify-center text-secondary-foreground">
+                <div className="w-12 h-12 md:w-16 md:h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 border border-slate-200">
                   <Scissors className="h-6 w-6" />
                 </div>
               )}
               
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-foreground leading-tight">
+                <h1 className="text-xl md:text-2xl font-bold text-slate-900 leading-tight">
                   {profile.salon_name || 'Krásný Salon'}
                 </h1>
-                <div className="flex flex-col sm:flex-row sm:items-center text-sm text-muted-foreground mt-1 gap-1 sm:gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center text-sm text-slate-500 mt-1 gap-1 sm:gap-4">
                   {profile.address && (
                     <a href={`https://maps.google.com/?q=${profile.address}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 hover:text-primary transition-colors">
                         <MapPin className="h-3 w-3" /> {profile.address}
@@ -328,10 +342,10 @@ export default function SalonPublicPage({ params }: PageProps) {
             </div>
 
             <div className="hidden sm:flex flex-col items-end">
-               <div className="bg-secondary/10 text-secondary-foreground px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                 <Star className="h-3 w-3 fill-secondary-foreground" /> 4.9
+               <div className="bg-yellow-50 text-yellow-700 border border-yellow-200 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                 <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" /> 4.9
                </div>
-               <span className="text-xs text-muted-foreground mt-1">Ověřený Salon</span>
+               <span className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Ověřeno</span>
             </div>
 
           </div>
@@ -342,32 +356,40 @@ export default function SalonPublicPage({ params }: PageProps) {
         
         {/* KROK 1: SLUŽBY */}
         {bookingStep === 1 && (
-          <section className="space-y-6 animate-in slide-in-from-bottom-4 duration-300 fade-in">
-            <h2 className="text-lg font-semibold flex items-center gap-3 text-foreground">
-              <span className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">1</span> Vyberte službu
-            </h2>
+          <section className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 fade-in">
+            <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
+                <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">1</span> Vyberte službu
+                </h2>
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 1/3</span>
+            </div>
+            
             <div className="grid gap-3">
               {services.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-10">Tento salon zatím nemá nastavené žádné služby.</p>
+                  <div className="text-center py-16 bg-white rounded-xl border border-dashed border-slate-300">
+                      <Scissors className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500">Tento salon zatím nemá nastavené žádné služby.</p>
+                  </div>
               ) : (
                   services.map(service => (
                     <Card key={service.id} 
-                      className={`cursor-pointer border-2 transition-all duration-200 ${selectedServiceId === service.id ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-transparent hover:border-border hover:bg-white shadow-sm'}`}
+                      className={`cursor-pointer border transition-all duration-200 group ${selectedServiceId === service.id ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-md' : 'border-slate-200 bg-white hover:border-primary/50 hover:shadow-sm'}`}
                       onClick={() => setSelectedServiceId(service.id)}
                     >
                       <CardContent className="p-5 flex justify-between items-center">
                         <div>
-                          <h3 className="font-medium text-foreground text-lg">{service.title}</h3>
-                          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-                             <Clock className="h-3 w-3" /> {service.duration_minutes} min 
-                             <span className="text-border">|</span>
-                             <span className="font-semibold text-foreground">{service.price} Kč</span>
-                          </p>
+                          <h3 className={`font-semibold text-lg ${selectedServiceId === service.id ? 'text-primary' : 'text-slate-900'}`}>{service.title}</h3>
+                          <div className="flex items-center gap-3 mt-1.5">
+                             <div className="flex items-center text-sm text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                <Clock className="h-3 w-3 mr-1" /> {service.duration_minutes} min 
+                             </div>
+                             <span className="font-bold text-slate-900">{service.price} Kč</span>
+                          </div>
+                          {service.description && <p className="text-sm text-slate-500 mt-2 line-clamp-2">{service.description}</p>}
                         </div>
-                        {selectedServiceId === service.id ? 
-                            <div className="bg-primary text-primary-foreground rounded-full p-1"><Check className="h-5 w-5" /></div> 
-                            : <div className="w-7 h-7 rounded-full border-2 border-muted" />
-                        }
+                        <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedServiceId === service.id ? 'border-primary bg-primary text-white' : 'border-slate-300 bg-transparent'}`}>
+                            {selectedServiceId === service.id && <Check className="h-3 w-3" />}
+                        </div>
                       </CardContent>
                     </Card>
                   ))
@@ -379,19 +401,23 @@ export default function SalonPublicPage({ params }: PageProps) {
         {/* KROK 2: TERMÍN */}
         {bookingStep === 2 && (
           <section className="space-y-6 animate-in slide-in-from-right-8 duration-300 fade-in">
-            <Button variant="ghost" onClick={() => setBookingStep(1)} className="pl-0 text-muted-foreground hover:text-foreground mb-2 group">
-              <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform"/> Zpět na služby
-            </Button>
-            <h2 className="text-lg font-semibold flex items-center gap-3 text-foreground">
-              <span className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">2</span> Vyberte termín
+            <div className="flex items-center justify-between">
+                <Button variant="ghost" onClick={() => setBookingStep(1)} className="pl-0 text-slate-500 hover:text-slate-900 mb-2 group h-auto py-0 hover:bg-transparent">
+                <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform"/> Zpět na služby
+                </Button>
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 2/3</span>
+            </div>
+
+            <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
+              <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">2</span> Vyberte termín
             </h2>
             
-            <div className="bg-card p-6 rounded-xl border shadow-sm space-y-6">
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
               <div>
-                <Label className="text-foreground font-medium">Datum návštěvy</Label>
+                <Label className="text-slate-700 font-medium mb-2 block flex items-center gap-2"><Calendar className="h-4 w-4"/> Datum návštěvy</Label>
                 <Input 
                   type="date" 
-                  className="mt-2 h-12 text-lg bg-background cursor-pointer" 
+                  className="mt-2 h-12 text-lg bg-slate-50 border-slate-200 focus:border-primary focus:ring-primary cursor-pointer w-full" 
                   min={new Date().toISOString().split('T')[0]} 
                   value={selectedDate} 
                   onChange={e => { setSelectedDate(e.target.value); setSelectedTime(null); }} 
@@ -399,26 +425,36 @@ export default function SalonPublicPage({ params }: PageProps) {
               </div>
 
               <div>
-                <Label className="text-foreground font-medium">Dostupné časy</Label>
-                {!selectedDate ? <p className="text-sm text-muted-foreground mt-3 italic p-4 bg-muted/30 rounded-md text-center">Nejdříve vyberte datum nahoře.</p> :
-                 loadingSlots ? <div className="p-8 text-center"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto"></div></div> :
-                 availableSlots.length === 0 ? <p className="text-sm text-destructive mt-3 font-medium p-4 bg-destructive/10 rounded-md text-center">Pro tento den je bohužel plno nebo zavřeno.</p> :
-                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4 max-h-80 overflow-y-auto custom-scrollbar pr-2">
-                   {availableSlots.map(time => (
-                     <button 
-                       key={time} 
-                       onClick={() => setSelectedTime(time)}
-                       className={`py-3 text-sm rounded-md border transition-all duration-200 ${
-                         selectedTime === time 
-                           ? 'bg-primary text-primary-foreground border-primary font-bold shadow-md scale-105' 
-                           : 'bg-background text-foreground border-border hover:border-primary/50 hover:bg-primary/5'
-                       }`}
-                     >
-                       {time}
-                     </button>
-                   ))}
-                 </div>
-                }
+                <Label className="text-slate-700 font-medium mb-2 block flex items-center gap-2"><Clock className="h-4 w-4"/> Dostupné časy</Label>
+                <div className="min-h-[100px]">
+                    {!selectedDate ? 
+                        <div className="text-sm text-slate-500 italic p-6 bg-slate-50 rounded-lg text-center border border-dashed border-slate-200">
+                            Nejdříve vyberte datum v kalendáři výše.
+                        </div> :
+                    loadingSlots ? 
+                        <div className="p-8 text-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto opacity-50"></div><p className="text-xs text-slate-400 mt-2">Ověřuji dostupnost...</p></div> :
+                    availableSlots.length === 0 ? 
+                        <div className="text-sm text-red-600 font-medium p-6 bg-red-50 rounded-lg text-center border border-red-100 flex flex-col items-center gap-2">
+                            <Info className="h-5 w-5"/>
+                            Pro tento den je bohužel plno nebo zavřeno.
+                        </div> :
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+                    {availableSlots.map(time => (
+                        <button 
+                        key={time} 
+                        onClick={() => setSelectedTime(time)}
+                        className={`py-3 px-2 text-sm rounded-lg border transition-all duration-200 font-medium ${
+                            selectedTime === time 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105 transform' 
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-primary hover:text-primary hover:bg-primary/5'
+                        }`}
+                        >
+                        {time}
+                        </button>
+                    ))}
+                    </div>
+                    }
+                </div>
               </div>
             </div>
           </section>
@@ -427,54 +463,58 @@ export default function SalonPublicPage({ params }: PageProps) {
         {/* KROK 3: KONTAKT */}
         {bookingStep === 3 && (
           <section className="space-y-6 animate-in slide-in-from-right-8 duration-300 fade-in">
-            <Button variant="ghost" onClick={() => setBookingStep(2)} className="pl-0 text-muted-foreground hover:text-foreground mb-2 group">
-              <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform"/> Zpět na termín
-            </Button>
-            <h2 className="text-lg font-semibold flex items-center gap-3 text-foreground">
-              <span className="bg-primary text-primary-foreground w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold">3</span> Vaše údaje
+             <div className="flex items-center justify-between">
+                <Button variant="ghost" onClick={() => setBookingStep(2)} className="pl-0 text-slate-500 hover:text-slate-900 mb-2 group h-auto py-0 hover:bg-transparent">
+                <ArrowLeft className="h-4 w-4 mr-2 group-hover:-translate-x-1 transition-transform"/> Zpět na termín
+                </Button>
+                <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 3/3</span>
+            </div>
+
+            <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
+              <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">3</span> Vaše údaje
             </h2>
 
-            <Card className="border-none shadow-sm bg-card">
+            <Card className="border border-slate-200 shadow-sm bg-white">
               <CardContent className="p-6">
                 <form id="booking-form" onSubmit={handleBooking} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Jméno a Příjmení</Label>
+                    <Label htmlFor="name" className="text-slate-700">Jméno a Příjmení</Label>
                     <div className="relative">
-                      <User className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                      <Input id="name" className="pl-10 h-11 bg-background" required placeholder="Jan Novák" 
+                      <User className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                      <Input id="name" className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-primary focus:border-primary" required placeholder="Jan Novák" 
                         value={clientInfo.name} onChange={e => setClientInfo({...clientInfo, name: e.target.value})}
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email" className="text-slate-700">Email</Label>
                       <div className="relative">
-                        <Mail className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                        <Input id="email" type="email" className="pl-10 h-11 bg-background" required placeholder="jan@email.cz" 
+                        <Mail className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                        <Input id="email" type="email" className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-primary focus:border-primary" required placeholder="jan@email.cz" 
                           value={clientInfo.email} onChange={e => setClientInfo({...clientInfo, email: e.target.value})}
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Telefon</Label>
+                      <Label htmlFor="phone" className="text-slate-700">Telefon</Label>
                       <div className="relative">
-                        <Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
-                        <Input id="phone" type="tel" className="pl-10 h-11 bg-background" required placeholder="+420 777 123 456" 
+                        <Smartphone className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                        <Input id="phone" type="tel" className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-primary focus:border-primary" required placeholder="+420 777 123 456" 
                           value={clientInfo.phone} onChange={e => setClientInfo({...clientInfo, phone: e.target.value})}
                         />
                       </div>
                     </div>
                   </div>
                   
-                  {/* GDPR Souhlas - PŘIDÁNO */}
-                  <div className="flex items-start space-x-3 pt-4 border-t mt-4">
-                    <Checkbox id="terms" checked={termsAccepted} onCheckedChange={(checked) => setTermsAccepted(checked as boolean)} />
+                  {/* GDPR Souhlas */}
+                  <div className="flex items-start space-x-3 pt-4 border-t border-slate-100 mt-4 bg-slate-50/50 p-4 rounded-lg">
+                    <Checkbox id="terms" checked={termsAccepted} onCheckedChange={(checked) => setTermsAccepted(checked as boolean)} className="mt-1" />
                     <div className="grid gap-1.5 leading-none">
-                      <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        Souhlasím s obchodními podmínkami a zpracováním osobních údajů
+                      <Label htmlFor="terms" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-700">
+                        Souhlasím s <Link href="/obchodni-podminky" className="text-primary underline hover:text-primary/80" target="_blank">obchodními podmínkami</Link> a zpracováním osobních údajů
                       </Label>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-slate-500">
                         Vaše údaje budou použity pouze pro účely rezervace v salonu {profile.salon_name}.
                       </p>
                     </div>
@@ -490,30 +530,30 @@ export default function SalonPublicPage({ params }: PageProps) {
 
       {/* STICKY FOOTER (Košík) */}
       {selectedService && bookingStep < 4 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-md border-t p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-50 animate-in slide-in-from-bottom-full duration-500">
+        <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-50 animate-in slide-in-from-bottom-full duration-500">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
             <div className="hidden sm:block">
-              <p className="text-xs text-muted-foreground uppercase font-bold tracking-wide">Rezervace</p>
-              <div className="flex items-center gap-2">
-                 <p className="font-bold text-foreground text-lg">{selectedService.title}</p>
-                 <span className="bg-muted px-2 py-0.5 rounded text-xs font-medium">{selectedService.price} Kč</span>
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Vaše Rezervace</p>
+              <div className="flex items-center gap-3">
+                 <p className="font-bold text-slate-900 text-lg truncate max-w-[200px]">{selectedService.title}</p>
+                 <span className="bg-slate-100 px-2 py-1 rounded text-xs font-semibold text-slate-700 border border-slate-200">{selectedService.price} Kč</span>
               </div>
             </div>
             
             <div className="flex gap-3 w-full sm:w-auto">
               {bookingStep === 1 && (
-                <Button onClick={() => setBookingStep(2)} className="w-full sm:w-auto h-12 text-base px-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all hover:scale-105">
-                  Vybrat termín <ChevronRight className="ml-2 h-4 w-4"/>
+                <Button onClick={() => setBookingStep(2)} className="w-full sm:w-auto h-12 text-base px-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] rounded-xl font-bold">
+                  Vybrat termín <ChevronRight className="ml-2 h-5 w-5"/>
                 </Button>
               )}
               {bookingStep === 2 && (
-                <Button disabled={!selectedDate || !selectedTime} onClick={() => setBookingStep(3)} className="w-full sm:w-auto h-12 text-base px-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100">
-                  Zadat údaje <ChevronRight className="ml-2 h-4 w-4"/>
+                <Button disabled={!selectedDate || !selectedTime} onClick={() => setBookingStep(3)} className="w-full sm:w-auto h-12 text-base px-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 rounded-xl font-bold">
+                  Zadat údaje <ChevronRight className="ml-2 h-5 w-5"/>
                 </Button>
               )}
               {bookingStep === 3 && (
-                <Button form="booking-form" type="submit" disabled={isSubmitting || !termsAccepted} className="w-full sm:w-auto h-12 text-base px-8 bg-green-600 hover:bg-green-700 text-white shadow-md transition-all hover:scale-105 disabled:opacity-50 disabled:hover:scale-100">
-                  {isSubmitting ? 'Odesílám...' : 'Dokončit rezervaci'}
+                <Button form="booking-form" type="submit" disabled={isSubmitting || !termsAccepted} className="w-full sm:w-auto h-12 text-base px-8 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 rounded-xl font-bold">
+                  {isSubmitting ? 'Odesílám...' : 'Dokončit rezervaci'} <Check className="ml-2 h-5 w-5"/>
                 </Button>
               )}
             </div>
@@ -523,4 +563,61 @@ export default function SalonPublicPage({ params }: PageProps) {
 
     </div>
   )
+}
+
+// --- GENERÁTOR HTML EMAILU ---
+const generateEmailHtml = (clientName: string, salonName: string, date: string, time: string, serviceName: string, price: number, cancelLink: string, salonAddress: string) => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: 'Poppins', sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+    .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .header { background-color: #1A1A1A; padding: 24px; text-align: center; }
+    .header h1 { color: #F4C430; margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
+    .content { padding: 32px 24px; color: #333333; line-height: 1.6; }
+    .details { background-color: #F8F5E6; border-left: 4px solid #F4C430; padding: 16px; margin: 24px 0; border-radius: 4px; }
+    .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .detail-label { color: #666; font-size: 14px; }
+    .detail-value { font-weight: bold; color: #1A1A1A; }
+    .btn { display: inline-block; padding: 12px 24px; background-color: #F4C430; color: #1A1A1A; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 16px; margin-top: 16px; }
+    .footer { background-color: #f1f1f1; padding: 16px; text-align: center; font-size: 12px; color: #888; }
+    .cancel-link { color: #ef4444; text-decoration: underline; font-size: 12px; margin-top: 16px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${salonName}</h1>
+    </div>
+    <div class="content">
+      <h2 style="margin-top: 0; color: #1A1A1A;">Rezervace potvrzena ✅</h2>
+      <p>Dobrý den, <strong>${clientName}</strong>,</p>
+      <p>Těšíme se na vaši návštěvu! Vaše rezervace byla úspěšně uložena do našeho systému.</p>
+      
+      <div class="details">
+        <div style="margin-bottom: 8px;"><strong>📅 Datum:</strong> ${date}</div>
+        <div style="margin-bottom: 8px;"><strong>⏰ Čas:</strong> ${time}</div>
+        <div style="margin-bottom: 8px;"><strong>✂️ Služba:</strong> ${serviceName}</div>
+        <div><strong>💰 Cena:</strong> ${price} Kč</div>
+      </div>
+
+      <p style="font-size: 14px; color: #666;">
+        📍 Adresa: <strong>${salonAddress}</strong><br>
+        (Doporučujeme přijít o 5 minut dříve)
+      </p>
+
+      <div style="text-align: center; margin-top: 32px;">
+        <a href="${cancelLink}" class="cancel-link">Nemůžete dorazit? Zrušit rezervaci</a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>© ${new Date().getFullYear()} ${salonName} • Powered by APIS</p>
+    </div>
+  </div>
+</body>
+</html>
+  `
 }
