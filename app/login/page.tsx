@@ -115,7 +115,7 @@ export default function AuthPage() {
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
           <Scissors className="h-5 w-5" />
         </div>
-        Salonio
+        APIS
       </div>
 
       {/* --- OBRAZOVKA: RESET HESLA --- */}
@@ -207,7 +207,7 @@ export default function AuthPage() {
           <Card>
             <CardHeader>
               <CardTitle>Nový účet</CardTitle>
-              <CardDescription>Začněte používat Salonio zdarma.</CardDescription>
+              <CardDescription>Začněte používat APIS zdarma.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUp} className="space-y-4">

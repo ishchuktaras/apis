@@ -1,6 +1,9 @@
+// app/page.tsx
+
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Check, Scissors, Calendar, Globe, ShieldCheck, Heart, Zap } from 'lucide-react'
+import { LogoIcon } from '@/components/logo'
 
 export default function LandingPage() {
   return (
@@ -10,9 +13,9 @@ export default function LandingPage() {
       <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-white sticky top-0 z-50">
         <Link className="flex items-center justify-center gap-2" href="#">
           <div className="bg-slate-900 text-white p-1.5 rounded-full">
-            <Scissors className="h-5 w-5" />
+            <LogoIcon className="h-10 w-auto" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-slate-900">Salonio</span>
+          <span className="font-bold text-xl tracking-tight text-slate-900 uppercase">APIS</span>
         </Link>
         <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
           <Link className="text-sm font-medium hover:underline underline-offset-4 hidden sm:block" href="#funkce">
@@ -42,7 +45,7 @@ export default function LandingPage() {
                   pro váš salon v jednom.
                 </h1>
                 <p className="mx-auto max-w-[700px] text-slate-500 md:text-xl dark:text-slate-400">
-                  Neplaťte agenturám za web a dalším za systém. Salonio vám dá profesionální prezentaci i chytrý kalendář za jeden férový paušál.
+                  Neplaťte agenturám za web a dalším za systém. APIS vám dá profesionální prezentaci i chytrý kalendář za jeden férový paušál.
                 </p>
               </div>
               <div className="space-x-4 pt-4">
@@ -68,7 +71,7 @@ export default function LandingPage() {
         <section id="funkce" className="w-full py-12 md:py-24 lg:py-32 bg-white">
           <div className="container px-4 md:px-6 mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl text-slate-900">Proč si salony vybírají Salonio?</h2>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl text-slate-900">Proč si salony vybírají APIS?</h2>
               <p className="text-slate-500 mt-2">Protože rozumíme vašim potřebám a nehrajeme nefér hru.</p>
             </div>
             <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
@@ -208,7 +211,7 @@ export default function LandingPage() {
             </p>
             <Link href="/login">
               <Button size="lg" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-500 h-14 px-10 text-xl font-bold">
-                Vyzkoušet Salonio zdarma
+                Vyzkoušet APIS zdarma
               </Button>
             </Link>
           </div>
@@ -219,7 +222,7 @@ export default function LandingPage() {
       {/* --- FOOTER --- */}
       <footer className="flex flex-col gap-2 sm:flex-row py-6 w-full shrink-0 items-center px-4 md:px-6 border-t">
         <p className="text-xs text-slate-500">
-          &copy; 2024 Salonio (Wellio SaaS). Všechna práva vyhrazena.
+          &copy; 2024 APIS (APIS SaaS). Všechna práva vyhrazena.
         </p>
         <nav className="sm:ml-auto flex gap-4 sm:gap-6">
           <Link className="text-xs hover:underline underline-offset-4 text-slate-500" href="#">

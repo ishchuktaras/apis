@@ -281,7 +281,7 @@ export default function SettingsPage() {
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Název Salonu</Label><Input className="pl-3" placeholder="Např. Kadeřnictví Jana" value={profile.salon_name} onChange={e => setProfile({...profile, salon_name: e.target.value})} required /></div>
-              <div className="space-y-2"><Label>Webová adresa (URL)</Label><Input className="pl-3" placeholder="kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required /><p className="text-xs text-slate-500">Adresa: salonio.cz/<strong>{profile.slug}</strong></p></div>
+              <div className="space-y-2"><Label>Webová adresa (URL)</Label><Input className="pl-3" placeholder="kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required /><p className="text-xs text-slate-500">Adresa: APIS.cz/<strong>{profile.slug}</strong></p></div>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Telefon</Label><Input className="pl-3" placeholder="+420 123 456 789" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} /></div>

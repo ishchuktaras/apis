@@ -71,7 +71,7 @@ export default function DashboardLayout({
             
             <div className="leading-tight">
               <h1 className="font-bold text-slate-800 truncate w-32">
-                {salonName || 'Salonio'}
+                {salonName || 'APIS'}
               </h1>
               <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                 Admin Panel

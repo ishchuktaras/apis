@@ -1,3 +1,5 @@
+// app/[slug]/page.tsx
+
 'use client'
 
 import { useState, useEffect, use } from 'react'
@@ -242,7 +244,7 @@ export default function SalonPublicPage({ params }: PageProps) {
               </a>
 
               <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;" />
-              <p style="font-size: 12px; color: #888;">Spravováno systémem Salonio.</p>
+              <p style="font-size: 12px; color: #888;">Spravováno systémem APIS.</p>
             </div>
           `
         })

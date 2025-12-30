@@ -176,7 +176,7 @@ export default function DashboardOverview() {
             <div>
               <h3 className="font-semibold text-lg text-slate-900">Váš web je online! 🚀</h3>
               <p className="text-slate-600 text-sm">
-                Klienti se mohou objednávat na adrese: <span className="font-mono bg-white px-1 py-0.5 rounded border">salonio.cz/{salonSlug}</span>
+                Klienti se mohou objednávat na adrese: <span className="font-mono bg-white px-1 py-0.5 rounded border">APIS.cz/{salonSlug}</span>
               </p>
             </div>
             <Link href={`/${salonSlug}`} target="_blank">

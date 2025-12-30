@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     // Odeslání e-mailu přes Resend
     const data = await resend.emails.send({
-      from: 'Salonio <onboarding@resend.dev>', // Používáme testovací doménu Resend (ve free verzi nutné)
+      from: 'APIS <onboarding@resend.dev>', // Používáme testovací doménu Resend (ve free verzi nutné)
       to: [to], // POZOR: Ve free verzi zde musí být TVŮJ email (na který jsi se registroval na Resend.com)
       subject: subject,
       html: html,
