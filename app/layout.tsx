@@ -1,15 +1,18 @@
-// app/layout.tsx
-
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
+import { Poppins } from "next/font/google";
+import "./globals.css"; 
 import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({ subsets: ["latin"] });
+// Nastavení fontu Poppins
+const poppins = Poppins({ 
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-poppins",
+});
 
 export const metadata: Metadata = {
-  title: "APIS - SaaS pro Beauty Salony",
-  description: "Moderní rezervační systém pro kadeřnictví a kosmetiku.",
+  title: "APIS - Systém pro moderní salony",
+  description: "Vlastní web a rezervace pro kadeřnictví a beauty salony.",
 };
 
 export default function RootLayout({
@@ -19,8 +22,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="cs">
-      {/* suppressHydrationWarning ignoruje chyby od doplňků prohlížeče */}
-      <body className={inter.className} suppressHydrationWarning={true}>
+      {/* Aplikace fontu a suppressHydrationWarning */}
+      <body className={poppins.className} suppressHydrationWarning={true}>
         {children}
         <Toaster />
       </body>

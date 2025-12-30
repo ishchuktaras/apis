@@ -11,7 +11,7 @@ import { Clock, AlertCircle, Store, Globe, MapPin, Phone, FileText, Save, Upload
 import { toast } from "sonner"
 
 // --- KONFIGURACE ---
-// DŮLEŽITÉ: Musí začínat Nedělí (index 0), aby sedělo s Date.getDay() v JavaScriptu
+// DŮLEŽITÉ: Pro správnou funkčnost kalendáře musí být 0 = Neděle.
 const DAYS = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota']
 
 // Generátor časů po 5 minutách (07:00 - 21:00)
@@ -96,7 +96,7 @@ export default function SettingsPage() {
       }
       setLoadingProfile(false)
 
-      // 2. Otevírací doba (Filtrováno dle user_id)
+      // 2. Otevírací doba
       const { data: hoursData } = await supabase
         .from('business_hours')
         .select('*')
@@ -214,16 +214,25 @@ export default function SettingsPage() {
       const { error: deleteError } = await supabase.from('business_hours').delete().eq('user_id', user.id)
       if (deleteError) throw deleteError
 
-      // Generujeme Po-Ne (Víkend 0=Ne a 6=So zavřeno)
       const defaultHours = Array.from({ length: 7 }, (_, i) => ({
         user_id: user.id,
         day_of_week: i,
         open_time: '09:00',
         close_time: '17:00',
-        is_closed: i === 0 || i === 6 // Neděle (0) a Sobota (6) zavřeno
+        is_closed: i === 5 || i === 6 // ZAVŘENO: Sobota (5) a Neděle (6) - pokud DAYS začíná Nedělí (0), tak sobota je 6 a neděle 0. Upravíme logiku níže.
       }))
 
-      const { error: insertError } = await supabase.from('business_hours').insert(defaultHours)
+      // Oprava logiky pro dny, pokud 0=Ne, 1=Po...6=So
+      // Chceme zavřít Sobotu (6) a Neděli (0)
+      const correctedDefaultHours = Array.from({ length: 7 }, (_, i) => ({
+        user_id: user.id,
+        day_of_week: i,
+        open_time: '09:00',
+        close_time: '17:00',
+        is_closed: i === 0 || i === 6 
+      }))
+
+      const { error: insertError } = await supabase.from('business_hours').insert(correctedDefaultHours)
       if (insertError) throw insertError
 
       toast.success("Otevírací doba byla resetována.")
@@ -245,10 +254,8 @@ export default function SettingsPage() {
 
   if (loadingProfile && loadingHours) return <div className="p-8 text-center">Načítám...</div>
 
-  // Řazení pro zobrazení: Chceme zobrazit Pondělí (1) první, Neděli (0) poslední.
-  // Vytvoříme kopii a seřadíme ji.
+  // Řazení pro zobrazení: Aby Pondělí (1) bylo první a Neděle (0) poslední
   const sortedHours = [...hours].sort((a, b) => {
-    // Pokud je den 0 (Neděle), bereme ho jako 7 pro účely řazení
     const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
     const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
     return dayA - dayB
@@ -281,7 +288,7 @@ export default function SettingsPage() {
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Název Salonu</Label><Input className="pl-3" placeholder="Např. Kadeřnictví Jana" value={profile.salon_name} onChange={e => setProfile({...profile, salon_name: e.target.value})} required /></div>
-              <div className="space-y-2"><Label>Webová adresa (URL)</Label><Input className="pl-3" placeholder="kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required /><p className="text-xs text-slate-500">Adresa: APIS.cz/<strong>{profile.slug}</strong></p></div>
+              <div className="space-y-2"><Label>Webová adresa (URL)</Label><Input className="pl-3" placeholder="kadernictvi-jana" value={profile.slug} onChange={e => setProfile({...profile, slug: e.target.value})} required /><p className="text-xs text-slate-500">Adresa: salonio.cz/<strong>{profile.slug}</strong></p></div>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Telefon</Label><Input className="pl-3" placeholder="+420 123 456 789" value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} /></div>
@@ -304,11 +311,23 @@ export default function SettingsPage() {
         <CardContent>
           {hours.length === 0 ? <div className="text-center py-8"><AlertCircle className="h-10 w-10 text-yellow-500 mx-auto mb-2" /><Button onClick={initializeHours} disabled={loadingHours}>Vygenerovat standardní</Button></div> : 
             <div className="space-y-4">
-              {/* Použijeme sortedHours, aby Pondělí bylo první */}
+              {/* Používáme sortedHours, aby Pondělí bylo první */}
               {sortedHours.map((day) => (
                 <div key={day.id} className={`flex items-center justify-between p-3 rounded-lg border ${day.is_closed ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}>
-                  <div className="w-24 font-medium text-slate-700">{DAYS[day.day_of_week]}</div>
-                  <div className="flex items-center gap-2"><Label className="text-xs text-slate-500 md:hidden">{day.is_closed ? 'Zavřeno' : 'Otevřeno'}</Label><Switch checked={!day.is_closed} onCheckedChange={(checked) => handleHoursSave(day.id, { is_closed: !checked })} /></div>
+                  {/* Zde musíme použít správný index pro pole DAYS (0=Ne, ale v sortedHours je první Po=1) */}
+                  <div className="w-24 font-medium text-slate-700">
+                    {/* Trik: Pokud day.day_of_week je 1 (Po), chceme index 1 v poli DAYS. Pokud je 0 (Ne), chceme index 0 */}
+                    {DAYS[day.day_of_week]}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor={`closed-${day.id}`} className="text-xs text-slate-500 md:hidden">{day.is_closed ? 'Zavřeno' : 'Otevřeno'}</Label>
+                    <Switch 
+                      id={`closed-${day.id}`} 
+                      checked={!day.is_closed} 
+                      // OPRAVA TYPU: Explicitně definujeme typ parametru checked
+                      onCheckedChange={(checked: boolean) => handleHoursSave(day.id, { is_closed: !checked })} 
+                    />
+                  </div>
                   <div className={`flex items-center gap-2 ${day.is_closed ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
                     <select className="flex h-10 w-24 rounded-md border bg-background px-3 py-2 text-sm" value={day.open_time?.slice(0,5)} onChange={(e) => handleHoursSave(day.id, { open_time: e.target.value })}>{TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}</select>
                     <span>-</span>
