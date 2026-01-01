@@ -2,35 +2,46 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trash2, Plus, Clock, Banknote } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Plus, Trash2, Edit2, Clock, Banknote, AlertCircle } from 'lucide-react'
 import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 interface Service {
   id: string
   title: string
-  description: string | null
   price: number
   duration_minutes: number
-  currency: string
+  description?: string
 }
 
 export default function ServicesPage() {
-  const router = useRouter()
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-
-  const [formData, setFormData] = useState({
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // Form state
+  const [newService, setNewService] = useState({
     title: '',
-    description: '',
     price: '',
-    duration: '30'
+    duration: '30',
+    description: ''
   })
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchServices()
@@ -38,190 +49,218 @@ export default function ServicesPage() {
 
   const fetchServices = async () => {
     try {
-      setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) {
-        router.push('/login')
-        return
-      }
+      if (!user) return
 
-      // --- OPRAVA BEZPEČNOSTI ---
-      // Musíme explicitně filtrovat služby podle ID přihlášeného uživatele
       const { data, error } = await supabase
         .from('services')
         .select('*')
-        .eq('user_id', user.id) // <--- TOTO JE KLÍČOVÉ!
-        .order('created_at', { ascending: false })
+        .eq('user_id', user.id)
+        .order('title')
 
       if (error) throw error
       setServices(data || [])
-
-    } catch (error: any) {
-      toast.error('Chyba při načítání: ' + error.message)
+    } catch (error) {
+      console.error('Chyba:', error)
+      toast.error('Nepodařilo se načíst služby')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitting(true)
+    setIsSubmitting(true)
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const { error } = await supabase.from('services').insert({
-        user_id: user.id,
-        title: formData.title,
-        description: formData.description,
-        price: Number(formData.price),
-        duration_minutes: Number(formData.duration),
-        currency: 'CZK'
-      })
+      const serviceData = {
+        title: newService.title,
+        price: parseInt(newService.price),
+        duration_minutes: parseInt(newService.duration),
+        description: newService.description,
+        user_id: user.id
+      }
+
+      let error
+      
+      if (editingId) {
+        // Update
+        const { error: updateError } = await supabase
+          .from('services')
+          .update(serviceData)
+          .eq('id', editingId)
+        error = updateError
+      } else {
+        // Insert
+        const { error: insertError } = await supabase
+          .from('services')
+          .insert(serviceData)
+        error = insertError
+      }
 
       if (error) throw error
 
-      setFormData({ title: '', description: '', price: '', duration: '30' })
+      toast.success(editingId ? 'Služba upravena' : 'Služba přidána')
+      setIsDialogOpen(false)
+      resetForm()
       fetchServices()
-      toast.success('Služba přidána')
 
     } catch (error: any) {
       toast.error('Chyba: ' + error.message)
     } finally {
-      setSubmitting(false)
+      setIsSubmitting(false)
     }
   }
 
+  // OPRAVENÁ FUNKCE PRO MAZÁNÍ
   const handleDelete = async (id: string) => {
     if (!confirm('Opravdu chcete tuto službu smazat?')) return
 
     try {
-      const { error } = await supabase.from('services').delete().eq('id', id)
-      if (error) throw error
-      
-      setServices(services.filter(service => service.id !== id))
-      toast.success('Služba smazána')
+      const { error } = await supabase
+        .from('services')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        // Detekce Foreign Key Constraint (kód 23503 v Postgres)
+        if (error.code === '23503') {
+          toast.error("Tuto službu nelze smazat, protože už na ni existují rezervace. (Historie musí zůstat zachována).", {
+            duration: 5000,
+            icon: <AlertCircle className="h-5 w-5 text-red-500"/>
+          })
+        } else {
+          throw error
+        }
+      } else {
+        toast.success("Služba byla smazána")
+        setServices(services.filter(s => s.id !== id))
+      }
     } catch (error: any) {
-      toast.error('Chyba: ' + error.message)
+      console.error(error)
+      // Pokud to nebyla chyba 23503, zobrazíme obecnou chybu
+      if (error.code !== '23503') {
+          toast.error("Chyba při mazání: " + error.message)
+      }
     }
   }
 
+  const startEdit = (service: Service) => {
+    setNewService({
+      title: service.title,
+      price: service.price.toString(),
+      duration: service.duration_minutes.toString(),
+      description: service.description || ''
+    })
+    setEditingId(service.id)
+    setIsDialogOpen(true)
+  }
+
+  const resetForm = () => {
+    setNewService({ title: '', price: '', duration: '30', description: '' })
+    setEditingId(null)
+  }
+
+  if (loading) return <div className="p-8 text-center">Načítám služby...</div>
+
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-8 text-slate-800">Správa Služeb</h1>
-
-      <div className="grid gap-8 md:grid-cols-[350px_1fr]">
-        
-        {/* Formulář */}
+    <div className="space-y-6 pb-20">
+      <div className="flex justify-between items-center">
         <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Nová služba</CardTitle>
-              <CardDescription>Přidejte službu do nabídky salonu.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
+            <h1 className="text-3xl font-bold text-slate-800">Služby</h1>
+            <p className="text-slate-500">Správa nabízených služeb a ceníku</p>
+        </div>
+        
+        <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if(!open) resetForm(); }}>
+          <DialogTrigger asChild>
+            <Button className="bg-primary hover:bg-primary/90 text-white">
+              <Plus className="h-4 w-4 mr-2" /> Nová služba
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editingId ? 'Upravit službu' : 'Přidat novou službu'}</DialogTitle>
+              <DialogDescription>
+                Vyplňte detaily služby, kterou budou klienti vidět při rezervaci.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Název služby</Label>
+                <Input placeholder="Např. Pánský střih" value={newService.title} onChange={e => setNewService({...newService, title: e.target.value})} required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="title">Název služby</Label>
-                  <Input 
-                    id="title" 
-                    placeholder="Např. Pánský střih" 
-                    value={formData.title}
-                    onChange={e => setFormData({...formData, title: e.target.value})}
-                    required
-                  />
+                  <Label>Cena (Kč)</Label>
+                  <Input type="number" placeholder="450" value={newService.price} onChange={e => setNewService({...newService, price: e.target.value})} required />
                 </div>
-                
                 <div className="space-y-2">
-                  <Label htmlFor="price">Cena (Kč)</Label>
-                  <Input 
-                    id="price" 
-                    type="number" 
-                    placeholder="0" 
-                    value={formData.price}
-                    onChange={e => setFormData({...formData, price: e.target.value})}
-                    required
-                  />
+                  <Label>Délka (min)</Label>
+                  <select 
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    value={newService.duration}
+                    onChange={e => setNewService({...newService, duration: e.target.value})}
+                  >
+                    {[15, 30, 45, 60, 90, 120].map(m => (
+                        <option key={m} value={m}>{m} min</option>
+                    ))}
+                  </select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Trvání (minuty)</Label>
-                  <Input 
-                    id="duration" 
-                    type="number" 
-                    step="5"
-                    value={formData.duration}
-                    onChange={e => setFormData({...formData, duration: e.target.value})}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="desc">Krátký popis</Label>
-                  <Input 
-                    id="desc" 
-                    placeholder="Včetně mytí..." 
-                    value={formData.description}
-                    onChange={e => setFormData({...formData, description: e.target.value})}
-                  />
-                </div>
-
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? 'Ukládám...' : <><Plus className="mr-2 h-4 w-4" /> Přidat službu</>}
+              </div>
+              <div className="space-y-2">
+                <Label>Popis (volitelné)</Label>
+                <Input placeholder="Krátký popis..." value={newService.description} onChange={e => setNewService({...newService, description: e.target.value})} />
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Ukládám...' : 'Uložit'}
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-        {/* Seznam služeb */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-slate-700">Vaše nabídka ({services.length})</h2>
-          
-          {loading ? (
-            <p className="text-muted-foreground">Načítám služby...</p>
-          ) : services.length === 0 ? (
-            <div className="text-center p-8 border-2 border-dashed rounded-lg text-muted-foreground">
-              Zatím nemáte žádné služby.
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {services.length === 0 ? (
+            <div className="col-span-full text-center py-12 bg-white rounded-lg border border-dashed border-slate-300">
+                <p className="text-slate-500">Zatím nemáte žádné služby. Přidejte první.</p>
             </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {services.map((service) => (
-                <Card key={service.id} className="relative group hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex justify-between items-start">
-                      {service.title}
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDelete(service.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </CardTitle>
-                    <CardDescription>{service.description || 'Bez popisu'}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between items-center text-sm font-medium text-slate-600 mt-2">
-                      <div className="flex items-center">
-                        <Banknote className="mr-1 h-4 w-4" />
-                        {service.price} Kč
-                      </div>
-                      <div className="flex items-center">
-                        <Clock className="mr-1 h-4 w-4" />
-                        {service.duration_minutes} min
-                      </div>
+        ) : (
+            services.map((service) => (
+            <Card key={service.id} className="hover:shadow-md transition-shadow">
+                <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg font-semibold">{service.title}</CardTitle>
+                    <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900" onClick={() => startEdit(service)}>
+                            <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={() => handleDelete(service.id)}>
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-
+                </div>
+                <CardDescription className="line-clamp-2 min-h-[20px]">
+                    {service.description}
+                </CardDescription>
+                </CardHeader>
+                <CardContent>
+                <div className="flex items-center gap-4 text-sm text-slate-600">
+                    <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
+                        <Clock className="h-3 w-3" /> {service.duration_minutes} min
+                    </div>
+                    <div className="flex items-center gap-1 font-semibold text-slate-900">
+                        <Banknote className="h-3 w-3" /> {service.price} Kč
+                    </div>
+                </div>
+                </CardContent>
+            </Card>
+            ))
+        )}
       </div>
     </div>
   )
