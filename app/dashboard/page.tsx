@@ -1,3 +1,5 @@
+// app/dashboard/page.tsx
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -40,7 +42,8 @@ export default function DashboardPage() {
   const fetchProfile = async (userId: string) => {
     const { data } = await supabase
       .from('profiles')
-      .select('salon_name, logo_url')
+      // DŮLEŽITÁ OPRAVA: Přidáno full_name do selectu, jinak se nenačte
+      .select('full_name, salon_name, logo_url')
       .eq('id', userId)
       .single()
     
@@ -100,8 +103,11 @@ export default function DashboardPage() {
     })
   }
 
-  // Získání jména uživatele (pokud není v metadatech, použijeme část emailu)
-  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Administrátor'
+  // OPRAVA JMÉNA:
+  // 1. Priorita: Jméno z DB profilu (Taras Ishchuk)
+  // 2. Priorita: Metadata z auth (pokud existují)
+  // 3. Fallback: 'Administrátor'
+  const displayName = profile?.full_name || user?.user_metadata?.full_name || 'Administrátor'
 
   return (
     <div className="space-y-8 pb-10">

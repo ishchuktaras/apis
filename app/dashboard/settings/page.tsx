@@ -1,7 +1,9 @@
+// app/dashboard/settings/page.tsx
+
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase' // Nyní by měl tento import fungovat
+import { supabase } from '@/lib/supabase'
 import { 
   Save, 
   CheckCircle2, 
@@ -37,18 +39,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const init = async () => {
-      // 1. Získání uživatele standardní cestou
+      // 1. Získání uživatele
       const { data: { user }, error } = await supabase.auth.getUser();
       
-      // Poznámka: V preview bez reálného loginu user může být null.
-      // Pro účely zobrazení UI v preview nastavíme dummy uživatele, pokud selže auth.
       if (!user) {
-         console.log("Preview mode: No user found, using mock user for display.");
-         // V produkci odkomentujte přesměrování:
-         // window.location.href = '/login';
-         
-         // Mock user pro preview
-         setUser({ id: 'mock-user-id', email: 'salon@example.com' });
+         // Pokud není uživatel přihlášen, přesměrujeme na login
+         window.location.href = '/login';
+         return;
       } else {
          setUser(user);
       }
@@ -128,11 +125,7 @@ function BusinessHoursSettings({ userId }: { userId: string }) {
   const fetchData = async () => {
     try {
         setLoading(true);
-        // Pokud nemáme reálné spojení, nevadí, použijeme default
-        if (!userId || userId === 'mock-user-id') {
-            setLoading(false);
-            return;
-        }
+        if (!userId) return;
 
         const { data, error } = await supabase
             .from('business_hours')
@@ -160,8 +153,7 @@ function BusinessHoursSettings({ userId }: { userId: string }) {
         }
     } catch (e: any) {
         console.error(e);
-        // V preview režimu nezobrazujeme chybu fetchování tak agresivně
-        // setError('Nepodařilo se načíst otevírací dobu: ' + e.message);
+        setError('Nepodařilo se načíst otevírací dobu: ' + e.message);
     } finally {
         setLoading(false);
     }
@@ -172,15 +164,7 @@ function BusinessHoursSettings({ userId }: { userId: string }) {
       setError(null);
       setSuccess(false);
       try {
-          if (!userId || userId === 'mock-user-id') {
-              // Simulace uložení pro preview
-              await new Promise(r => setTimeout(r, 800));
-              setSuccess(true);
-              setHasUnsavedChanges(false);
-              setTimeout(() => setSuccess(false), 3000);
-              setIsSaving(false);
-              return;
-          }
+          if (!userId) return;
 
           const updates = schedule.map(day => ({
               ...(day.db_id ? { id: day.db_id } : {}), 
@@ -279,11 +263,7 @@ function ProfileSettings({ userId, email }: { userId: string, email: string }) {
     const loadProfile = async () => {
         try {
             setLoading(true);
-            if (!userId || userId === 'mock-user-id') {
-                 setProfile({ id: 'mock', email: email, salon_name: 'Můj Salon', slug: 'muj-salon', address: 'Hlavní 123', phone: '+420 123 456 789' });
-                 setLoading(false);
-                 return;
-            }
+            if (!userId) return;
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -302,7 +282,7 @@ function ProfileSettings({ userId, email }: { userId: string, email: string }) {
             }
         } catch (e: any) { 
              console.error(e); 
-             // setMsg({ type: 'error', text: 'Chyba načítání profilu: ' + e.message });
+             setMsg({ type: 'error', text: 'Chyba načítání profilu: ' + e.message });
         } 
         finally { setLoading(false); }
     };
@@ -311,14 +291,7 @@ function ProfileSettings({ userId, email }: { userId: string, email: string }) {
         setSaving(true);
         setMsg(null);
         try {
-            if (!userId || userId === 'mock-user-id') {
-                await new Promise(r => setTimeout(r, 800));
-                setHasChanges(false);
-                setMsg({ type: 'success', text: 'Profil byl úspěšně uložen (Preview).' });
-                setTimeout(() => setMsg(null), 3000);
-                setSaving(false);
-                return;
-            }
+            if (!userId) return;
 
             const { error } = await supabase
                 .from('profiles')
@@ -408,11 +381,7 @@ function BrandingSettings({ userId }: { userId: string }) {
     const loadProfile = async () => {
         try {
             setLoading(true);
-            if (!userId || userId === 'mock-user-id') {
-                setProfile({ logo_url: '' });
-                setLoading(false);
-                return;
-            }
+            if (!userId) return;
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -432,14 +401,7 @@ function BrandingSettings({ userId }: { userId: string }) {
         setSaving(true);
         setMsg(null);
         try {
-            if (!userId || userId === 'mock-user-id') {
-                 await new Promise(r => setTimeout(r, 800));
-                 setHasChanges(false);
-                 setMsg({ type: 'success', text: 'Vzhled byl aktualizován (Preview).' });
-                 setTimeout(() => setMsg(null), 3000);
-                 setSaving(false);
-                 return;
-            }
+            if (!userId) return;
 
             const { error } = await supabase
                 .from('profiles')
