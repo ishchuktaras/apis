@@ -12,7 +12,7 @@ export const LandingHero = () => {
               pro váš salon v jednom.
             </h1>
             <p className="mx-auto max-w-[700px] text-slate-500 md:text-xl dark:text-slate-400">
-              Neplaťte agenturám za web a dalším za systém. Salonio vám dá profesionální prezentaci i chytrý kalendář za jeden férový paušál.
+              Neplaťte agenturám za web a dalším za systém. Apis vám dá profesionální prezentaci i chytrý kalendář za jeden férový paušál.
             </p>
           </div>
           <div className="space-x-4 pt-4">

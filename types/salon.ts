@@ -1,3 +1,5 @@
+// types/salon.ts
+
 export interface Service {
   id: string
   title: string

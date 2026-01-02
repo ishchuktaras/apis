@@ -1,3 +1,5 @@
+// app/login/page.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -11,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Scissors, CheckCircle, Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
 import { toast } from "sonner"
 
-// --- OPRAVA: Komponenta definovaná MIMO hlavní funkci ---
+
 // Tím zabráníme jejímu neustálému znovuvytváření a ztrátě fokusu.
 const PasswordInput = ({ id, value, onChange }: any) => {
   const [showPassword, setShowPassword] = useState(false)

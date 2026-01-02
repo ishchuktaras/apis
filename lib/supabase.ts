@@ -1,3 +1,5 @@
+// lib/supabase.ts
+
 import { createBrowserClient } from '@supabase/ssr'
 
 // Definice typů (zatím any, později nahradíme)

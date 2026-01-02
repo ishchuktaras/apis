@@ -1,207 +1,263 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { TrendingUp, Users, Calendar, ExternalLink, Copy } from 'lucide-react'
+import { Users, Calendar, Banknote, TrendingUp, Clock, ArrowRight, Store } from 'lucide-react'
 import Link from 'next/link'
+import { Button } from "@/components/ui/button"
 
-export default function DashboardOverview() {
-  const [stats, setStats] = useState({
-    todayRevenue: 0,
-    todayBookings: 0,
-    upcomingBookings: 0
-  })
-  const [salonSlug, setSalonSlug] = useState<string | null>(null)
+export default function DashboardPage() {
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [userName, setUserName] = useState('')
+  
+  // Statistiky
+  const [stats, setStats] = useState({
+    bookingsToday: 0,
+    revenueMonth: 0,
+    newClients: 0,
+    avgOrderValue: 0
+  })
 
   useEffect(() => {
-    fetchDashboardData()
+    const initData = async () => {
+      setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+      
+      if(user) {
+        await Promise.all([
+          fetchProfile(user.id),
+          fetchRealStats(user.id)
+        ])
+      }
+      setLoading(false)
+    }
+    initData()
   }, [])
 
-  const fetchDashboardData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+  const fetchProfile = async (userId: string) => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('salon_name, logo_url')
+      .eq('id', userId)
+      .single()
+    
+    if (data) setProfile(data)
+  }
 
-      // 1. Získání jména a slugu salonu
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('salon_name, slug')
-        .eq('id', user.id)
-        .single()
-      
-      if (profile) {
-        setUserName(profile.salon_name || 'Salone')
-        setSalonSlug(profile.slug)
-      }
+  const fetchRealStats = async (userId: string) => {
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
 
-      // 2. Datumy
-      const todayStr = new Date().toISOString().split('T')[0]
+    // 1. Dnešní rezervace (Počet)
+    // Nejdřív musíme zjistit salon_id (což je id uživatele v profiles)
+    // Předpokládáme, že userId == salon_id pro MVP (owner)
+    
+    const { count: bookingsToday } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('salon_id', userId)
+      .eq('booking_date', todayStr)
+      .neq('status', 'cancelled')
 
-      // 3. Dotaz na DNEŠNÍ rezervace (včetně ceny služby)
-      const { data: todayData } = await supabase
-        .from('bookings')
-        .select(`
-          *,
-          services ( price )
-        `)
-        .eq('salon_id', user.id)
-        .eq('booking_date', todayStr)
-        .neq('status', 'cancelled') // Počítáme jen aktivní
+    // 2. Rezervace tento měsíc (pro tržby a klienty)
+    // Musíme načíst i cenu služby. Jelikož 'bookings' má jen 'service_id', musíme udělat join.
+    // Supabase join syntaxe: select('*, services(price)')
+    const { data: monthBookings } = await supabase
+      .from('bookings')
+      .select('customer_email, service_id, services(price)')
+      .eq('salon_id', userId)
+      .gte('booking_date', firstDayOfMonth)
+      .neq('status', 'cancelled')
 
-      // Výpočet tržby
-      let revenue = 0
-      todayData?.forEach((booking: any) => {
+    let revenue = 0
+    const uniqueClients = new Set()
+
+    if (monthBookings) {
+      monthBookings.forEach((booking: any) => {
+        // Tržba (pokud služba existuje a má cenu)
         if (booking.services?.price) {
           revenue += booking.services.price
         }
+        // Unikátní klienti
+        if (booking.customer_email) {
+          uniqueClients.add(booking.customer_email)
+        }
       })
-
-      // 4. Dotaz na BUDOUCÍ rezervace (od zítřka)
-      const { count: upcomingCount } = await supabase
-        .from('bookings')
-        .select('*', { count: 'exact', head: true })
-        .eq('salon_id', user.id)
-        .gt('booking_date', todayStr)
-        .neq('status', 'cancelled')
-
-      setStats({
-        todayRevenue: revenue,
-        todayBookings: todayData?.length || 0,
-        upcomingBookings: upcomingCount || 0
-      })
-
-    } catch (error) {
-      console.error('Chyba dashboardu:', error)
-    } finally {
-      setLoading(false)
     }
+
+    const bookingsCount = monthBookings?.length || 0
+    const avgValue = bookingsCount > 0 ? Math.round(revenue / bookingsCount) : 0
+
+    setStats({
+      bookingsToday: bookingsToday || 0,
+      revenueMonth: revenue,
+      newClients: uniqueClients.size,
+      avgOrderValue: avgValue
+    })
   }
 
-  const copyLink = () => {
-    if (salonSlug) {
-      const url = `${window.location.origin}/${salonSlug}`
-      navigator.clipboard.writeText(url)
-      alert('Odkaz zkopírován: ' + url)
-    }
-  }
+  // Získání jména uživatele (pokud není v metadatech, použijeme část emailu)
+  const displayName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Administrátor'
 
   return (
-    <div className="space-y-8">
-      {/* HLAVIČKA */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Vítejte, {userName} 👋</h1>
-          <p className="text-slate-500">Zde je přehled vašeho dnešního dne.</p>
+    <div className="space-y-8 pb-10">
+      {/* Welcome Section - UX/UI Awesome Upgrade */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center gap-5">
+          {/* Avatar / Logo */}
+          <div className="relative">
+            {profile?.logo_url ? (
+                <img src={profile.logo_url} alt="Salon" className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md" />
+            ) : (
+                <div className="w-16 h-16 bg-gradient-to-br from-[#F4C430] to-orange-400 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-md shadow-orange-200">
+                  {profile?.salon_name?.[0] || 'A'}
+                </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full" title="Online"></div>
+          </div>
+          
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              Vítejte zpět, {displayName} 
+              <span className="text-xl">👋</span>
+            </h1>
+            <div className="flex items-center gap-2 text-slate-500 mt-1 text-sm font-medium">
+              <Store className="h-4 w-4" />
+              <span>{profile?.salon_name || 'Můj Salon'}</span>
+              <span className="text-slate-300">•</span>
+              <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs uppercase tracking-wide">Majitel</span>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          {salonSlug && (
-            <Button variant="outline" onClick={copyLink}>
-              <Copy className="mr-2 h-4 w-4" /> Sdílet odkaz
-            </Button>
-          )}
-          <Link href="/dashboard/calendar">
-            <Button className="bg-slate-900 text-white hover:bg-slate-800">
-              <Calendar className="mr-2 h-4 w-4" /> Kalendář
-            </Button>
-          </Link>
+
+        <div className="hidden md:block text-right">
+          <p className="text-sm text-slate-400 font-medium uppercase tracking-wider mb-1">Dnešní datum</p>
+          <p className="text-lg font-bold text-slate-700">
+            {new Date().toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
         </div>
       </div>
 
-      {/* KARTY STATISTIK */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard 
+          title="Dnešní rezervace" 
+          value={loading ? "..." : stats.bookingsToday.toString()} 
+          icon={Calendar} 
+          trend="Dnes"
+          color="bg-blue-50 text-blue-600"
+        />
+        <StatsCard 
+          title="Tržba tento měsíc" 
+          value={loading ? "..." : `${stats.revenueMonth.toLocaleString()} Kč`} 
+          icon={Banknote} 
+          trend="Od 1. dne v měsíci"
+          color="bg-green-50 text-green-600"
+        />
+        <StatsCard 
+          title="Aktivní klienti" 
+          value={loading ? "..." : stats.newClients.toString()} 
+          icon={Users} 
+          trend="Unikátní tento měsíc"
+          color="bg-purple-50 text-purple-600"
+        />
+        <StatsCard 
+          title="Průměrná hodnota" 
+          value={loading ? "..." : `${stats.avgOrderValue} Kč`} 
+          icon={TrendingUp} 
+          trend="Na jednu rezervaci"
+          color="bg-orange-50 text-orange-600"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Karta 1: Dnešní tržba */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Dnešní tržba (odhad)
+        {/* Quick Actions & Empty State */}
+        <Card className="lg:col-span-2 border-slate-200 shadow-sm overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5 text-slate-400" /> Nadcházející aktivita
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : `${stats.todayRevenue} Kč`}
-            </div>
-            <p className="text-xs text-slate-500">
-              z {stats.todayBookings} rezervací dnes
-            </p>
+          <CardContent className="p-0">
+            {stats.bookingsToday === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="bg-slate-50 p-4 rounded-full shadow-inner mb-4">
+                  <Calendar className="h-8 w-8 text-slate-300" />
+                </div>
+                <h3 className="font-semibold text-slate-900 text-lg">Dnes zatím klid</h3>
+                <p className="text-slate-500 max-w-xs mx-auto mt-2 mb-6 text-sm">
+                  Pro dnešní den nemáte žádné další rezervace. Je ideální čas na marketing nebo úpravu služeb.
+                </p>
+                <div className="flex gap-3">
+                  <Link href="/dashboard/calendar">
+                    <Button variant="outline">Otevřít kalendář</Button>
+                  </Link>
+                  <Link href="/dashboard/services">
+                    <Button>Spravovat služby</Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6">
+                 {/* Zde by byl seznam rezervací, pro MVP zatím placeholder */}
+                 <p className="text-slate-600">Máte <strong>{stats.bookingsToday}</strong> rezervací na dnešek. Podívejte se do kalendáře pro detaily.</p>
+                 <Link href="/dashboard/calendar" className="text-primary font-medium hover:underline mt-2 inline-block">Přejít do kalendáře &rarr;</Link>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Karta 2: Dnešní klienti */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Dnešní klienti
-            </CardTitle>
-            <Users className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : stats.todayBookings}
+        {/* Quick Links */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl text-white shadow-xl shadow-slate-200">
+            <h3 className="font-bold text-lg mb-1">Rychlé akce</h3>
+            <p className="text-slate-400 text-sm mb-6">Co potřebujete udělat?</p>
+            
+            <div className="space-y-3">
+              <QuickActionLink href="/dashboard/calendar" label="Otevřít kalendář" />
+              <QuickActionLink href="/dashboard/services" label="Přidat novou službu" />
+              <QuickActionLink href="/dashboard/settings" label="Upravit otevírací dobu" />
+              <QuickActionLink href="/dashboard/team" label="Spravovat tým" />
             </div>
-            <p className="text-xs text-slate-500">
-              Termíny naplánované na dnes
-            </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        {/* Karta 3: Budoucí rezervace */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">
-              Nadcházející
-            </CardTitle>
-            <Calendar className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '...' : stats.upcomingBookings}
-            </div>
-            <p className="text-xs text-slate-500">
-              Rezervace od zítřka dále
-            </p>
-          </CardContent>
-        </Card>
       </div>
-
-      {/* RYCHLÝ PŘÍSTUP K WEBU */}
-      {salonSlug ? (
-        <Card className="bg-slate-50 border-dashed border-2">
-          <CardContent className="flex flex-col md:flex-row items-center justify-between p-6 gap-4">
-            <div>
-              <h3 className="font-semibold text-lg text-slate-900">Váš web je online! 🚀</h3>
-              <p className="text-slate-600 text-sm">
-                Klienti se mohou objednávat na adrese: <span className="font-mono bg-white px-1 py-0.5 rounded border">APIS.cz/{salonSlug}</span>
-              </p>
-            </div>
-            <Link href={`/${salonSlug}`} target="_blank">
-              <Button variant="default">
-                Otevřít můj web <ExternalLink className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="bg-yellow-50 border-yellow-200 border-2">
-          <CardContent className="flex items-center justify-between p-6">
-            <div>
-              <h3 className="font-semibold text-lg text-yellow-800">Nemáte nastavenou adresu! ⚠️</h3>
-              <p className="text-yellow-700 text-sm">Pro spuštění webu musíte vyplnit profil.</p>
-            </div>
-            <Link href="/dashboard/settings">
-              <Button variant="outline" className="border-yellow-600 text-yellow-800 hover:bg-yellow-100">
-                Nastavit profil
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      )}
-
     </div>
+  )
+}
+
+function StatsCard({ title, value, icon: Icon, trend, color }: any) {
+  return (
+    <Card className="border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 group">
+      <CardContent className="p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <p className="text-sm font-medium text-slate-500 group-hover:text-slate-700 transition-colors">{title}</p>
+            <h3 className="text-2xl font-bold text-slate-900 mt-2 tracking-tight">{value}</h3>
+          </div>
+          <div className={`p-3 rounded-xl ${color} bg-opacity-10 group-hover:scale-110 transition-transform duration-300`}>
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center text-xs font-medium text-slate-400">
+          {trend}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function QuickActionLink({ href, label }: { href: string, label: string }) {
+  return (
+    <Link href={href} className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all group border border-white/5 hover:border-white/20">
+      <span className="text-sm font-medium text-slate-200 group-hover:text-white">{label}</span>
+      <ArrowRight className="h-4 w-4 text-slate-500 group-hover:text-[#F4C430] transition-colors"/>
+    </Link>
   )
 }

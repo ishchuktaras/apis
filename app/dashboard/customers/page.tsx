@@ -4,16 +4,44 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Users, Search, Mail, Phone, Calendar, TrendingUp } from 'lucide-react'
+import { Button } from "@/components/ui/button"
+import { 
+  Search, 
+  Mail, 
+  Phone, 
+  Calendar, 
+  CheckCircle2, 
+  XCircle, 
+  Clock, 
+  User,
+  History
+} from 'lucide-react'
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-// Definice typu pro agregovaného zákazníka
+// Typy pro zpracování dat
+interface Booking {
+  id: string
+  booking_date: string
+  status: string
+  customer_name: string
+  customer_email: string
+  customer_phone: string
+  service_id: string
+  services?: { title: string, price: number }
+}
+
 interface CustomerProfile {
+  id: string 
   name: string
   email: string
   phone: string
   totalVisits: number
   totalSpent: number
-  lastVisit: string
+  lastBooking: {
+    date: string
+    status: string
+    serviceName: string
+  } | null
 }
 
 export default function CustomersPage() {
@@ -27,165 +55,200 @@ export default function CustomersPage() {
 
   const fetchCustomers = async () => {
     try {
-      setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      // Načteme všechny rezervace (včetně ceny služeb)
-      const { data: bookings, error } = await supabase
+      // 1. Načteme všechny rezervace včetně detailů služeb
+      const { data: bookingsData, error } = await supabase
         .from('bookings')
         .select(`
-          customer_name,
-          customer_email,
-          customer_phone,
-          booking_date,
-          status,
-          services ( price )
+          *,
+          services ( title, price )
         `)
         .eq('salon_id', user.id)
-        .neq('status', 'cancelled') // Ignorujeme zrušené pro výpočet tržeb
-        .order('booking_date', { ascending: false }) // Od nejnovějších
+        .order('booking_date', { ascending: false }) // Nejnovejší první
 
       if (error) throw error
 
-      // --- LOGIKA AGREGACE (Seskupení podle emailu) ---
+      // 2. Agregace dat (Seskupení podle emailu)
       const customerMap = new Map<string, CustomerProfile>()
 
-      bookings?.forEach((booking: any) => {
+      bookingsData?.forEach((booking: any) => {
         const email = booking.customer_email
-        const price = booking.services?.price || 0
+        if (!email) return // Skip pokud chybí email (identifikátor)
 
-        if (customerMap.has(email)) {
-          // Zákazník už existuje -> aktualizujeme statistiky
-          const existing = customerMap.get(email)!
-          existing.totalVisits += 1
-          existing.totalSpent += price
-          // Datum neměníme, protože iterujeme od nejnovějších, takže první záznam je poslední návštěva
-        } else {
-          // Nový zákazník -> vytvoříme profil
+        if (!customerMap.has(email)) {
+          // Inicializace nového klienta
           customerMap.set(email, {
-            name: booking.customer_name,
-            email: booking.customer_email,
-            phone: booking.customer_phone,
-            totalVisits: 1,
-            totalSpent: price,
-            lastVisit: booking.booking_date
+            id: email,
+            name: booking.customer_name || 'Neznámý',
+            email: email,
+            phone: booking.customer_phone || '',
+            totalVisits: 0,
+            totalSpent: 0,
+            lastBooking: null
           })
+        }
+
+        const customer = customerMap.get(email)!
+        
+        // Statistiky
+        if (booking.status !== 'cancelled') {
+          customer.totalVisits += 1
+          customer.totalSpent += booking.services?.price || 0
+        }
+
+        // Poslední rezervace (díky řazení z DB je první nalezená ta nejnovější)
+        if (!customer.lastBooking) {
+          customer.lastBooking = {
+            date: booking.booking_date,
+            status: booking.status,
+            serviceName: booking.services?.title || 'Služba smazána'
+          }
         }
       })
 
-      // Převedeme Mapu na pole hodnot
+      // Převod Mapy na pole
       setCustomers(Array.from(customerMap.values()))
 
-    } catch (error) {
-      console.error('Chyba CRM:', error)
+    } catch (err) {
+      console.error('Chyba při načítání klientů:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  // Filtrace podle vyhledávání
+  // Filtrace
   const filteredCustomers = customers.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.phone.includes(searchTerm) ||
-    c.email.toLowerCase().includes(searchTerm.toLowerCase())
+    c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.phone.includes(searchTerm)
   )
 
-  if (loading) return <div className="p-8 text-center text-slate-500">Načítám databázi klientů...</div>
+  // Pomocná funkce pro status návštěvy
+  const getVisitStatus = (dateStr: string, status: string) => {
+    const bookingDate = new Date(dateStr)
+    const today = new Date()
+    // Reset času pro porovnání pouze data
+    today.setHours(0,0,0,0)
+    bookingDate.setHours(0,0,0,0)
+
+    if (status === 'cancelled') {
+      return { label: 'Zrušeno', icon: XCircle, color: 'text-red-500 bg-red-50' }
+    }
+    if (bookingDate < today) {
+      return { label: 'Proběhlo', icon: CheckCircle2, color: 'text-green-600 bg-green-50' }
+    }
+    if (bookingDate.getTime() === today.getTime()) {
+      return { label: 'Dnes', icon: Clock, color: 'text-blue-600 bg-blue-50' }
+    }
+    return { label: 'Naplánováno', icon: Calendar, color: 'text-amber-600 bg-amber-50' }
+  }
+
+  if (loading) return <div className="p-10 text-center animate-pulse">Načítám databázi klientů...</div>
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="space-y-8 pb-20">
       
-      {/* Hlavička a Vyhledávání */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Header & Search */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
-            <Users className="h-8 w-8" /> Databáze Klientů
-          </h1>
-          <p className="text-slate-500">
-            Celkem evidováno {customers.length} unikátních zákazníků.
+          <h1 className="text-3xl font-bold text-slate-900">Databáze Klientů</h1>
+          <p className="text-slate-500 mt-1">
+            Celkem evidujeme <strong>{customers.length}</strong> unikátních klientů.
           </p>
         </div>
-        
         <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
           <Input 
             placeholder="Hledat jméno, email, telefon..." 
-            className="pl-9 bg-white"
+            className="pl-10"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={e => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
-      {/* Tabulka Klientů (Card Layout) */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b">
-                <tr>
-                  <th className="px-6 py-4 font-medium">Jméno Klienta</th>
-                  <th className="px-6 py-4 font-medium">Kontakt</th>
-                  <th className="px-6 py-4 font-medium text-center">Návštěvy</th>
-                  <th className="px-6 py-4 font-medium text-right">Celkem utraceno</th>
-                  <th className="px-6 py-4 font-medium text-right">Poslední návštěva</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredCustomers.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                      Žádní zákazníci nebyli nalezeni.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCustomers.map((customer, index) => (
-                    <tr key={index} className="bg-white hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-900">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold">
-                            {customer.name.charAt(0).toUpperCase()}
+      {/* Grid Klientů */}
+      <div className="grid grid-cols-1 gap-4">
+        {filteredCustomers.length === 0 ? (
+           <div className="text-center py-16 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+             <User className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+             <p className="text-slate-500">Žádní klienti nenalezeni.</p>
+           </div>
+        ) : (
+          filteredCustomers.map((client) => {
+            const lastBookingInfo = client.lastBooking 
+              ? getVisitStatus(client.lastBooking.date, client.lastBooking.status)
+              : null
+
+            return (
+              <Card key={client.id} className="hover:shadow-md transition-shadow duration-200">
+                <CardContent className="p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  
+                  {/* Info o klientovi */}
+                  <div className="flex items-center gap-4 min-w-[250px]">
+                    <Avatar className="h-12 w-12 border-2 border-white shadow-sm">
+                      <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${client.name}`} />
+                      <AvatarFallback>{client.name.substring(0,2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="font-bold text-lg text-slate-900">{client.name}</h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-sm text-slate-500 mt-0.5">
+                        <a href={`mailto:${client.email}`} className="flex items-center hover:text-primary transition-colors">
+                          <Mail className="h-3 w-3 mr-1.5" /> {client.email}
+                        </a>
+                        {client.phone && (
+                          <a href={`tel:${client.phone}`} className="flex items-center hover:text-primary transition-colors">
+                            <Phone className="h-3 w-3 mr-1.5" /> {client.phone}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Statistiky */}
+                  <div className="flex items-center gap-6 md:border-l md:border-r border-slate-100 md:px-8">
+                    <div className="text-center">
+                      <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Návštěv</p>
+                      <p className="text-xl font-bold text-slate-700">{client.totalVisits}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Útrata</p>
+                      <p className="text-xl font-bold text-slate-700">{client.totalSpent.toLocaleString()} Kč</p>
+                    </div>
+                  </div>
+
+                  {/* Poslední / Nejbližší akce */}
+                  <div className="flex-1 w-full md:w-auto">
+                    <p className="text-xs text-slate-400 uppercase font-bold tracking-wider mb-2">Poslední aktivita</p>
+                    {client.lastBooking && lastBookingInfo ? (
+                      <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        <div>
+                          <div className="font-medium text-slate-900 flex items-center gap-2">
+                            {new Date(client.lastBooking.date).toLocaleDateString('cs-CZ')}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${lastBookingInfo.color}`}>
+                              <lastBookingInfo.icon className="h-3 w-3" />
+                              {lastBookingInfo.label}
+                            </span>
                           </div>
-                          {customer.name}
+                          <p className="text-xs text-slate-500 mt-1">{client.lastBooking.serviceName}</p>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-3 w-3" /> {customer.email}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-3 w-3" /> {customer.phone}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {customer.totalVisits}x
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right font-bold text-slate-900">
-                        {customer.totalSpent} Kč
-                      </td>
-                      <td className="px-6 py-4 text-right text-slate-500">
-                        {new Date(customer.lastVisit).toLocaleDateString('cs-CZ')}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <History className="h-4 w-4 text-slate-400" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">Žádná historie</p>
+                    )}
+                  </div>
 
-      {/* Rychlý tip pro uživatele */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3 text-sm text-blue-800">
-        <TrendingUp className="h-5 w-5 shrink-0" />
-        <div>
-          <strong>Tip pro růst:</strong> Podívejte se na klienty s největší útratou a nabídněte jim věrnostní slevu při příští návštěvě.
-        </div>
+                </CardContent>
+              </Card>
+            )
+          })
+        )}
       </div>
-
     </div>
   )
 }

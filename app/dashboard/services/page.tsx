@@ -1,3 +1,5 @@
+// app/dashboard/services/page.tsx
+
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Plus, Trash2, Edit2, Clock, Banknote, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, Banknote } from 'lucide-react'
 import { toast } from "sonner"
 import {
   Dialog,
@@ -24,6 +26,7 @@ interface Service {
   price: number
   duration_minutes: number
   description?: string
+  is_active?: boolean // Přidáno pro typovou kontrolu
 }
 
 export default function ServicesPage() {
@@ -52,10 +55,12 @@ export default function ServicesPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
+      // Načteme pouze AKTIVNÍ služby
       const { data, error } = await supabase
         .from('services')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_active', true) 
         .order('title')
 
       if (error) throw error
@@ -81,7 +86,8 @@ export default function ServicesPage() {
         price: parseInt(newService.price),
         duration_minutes: parseInt(newService.duration),
         description: newService.description,
-        user_id: user.id
+        user_id: user.id,
+        is_active: true // Při vytvoření/editaci je vždy aktivní
       }
 
       let error
@@ -115,36 +121,26 @@ export default function ServicesPage() {
     }
   }
 
-  // OPRAVENÁ FUNKCE PRO MAZÁNÍ
+  // UPRAVENÁ FUNKCE PRO "MAZÁNÍ" (ARCHIVACI)
   const handleDelete = async (id: string) => {
-    if (!confirm('Opravdu chcete tuto službu smazat?')) return
+    if (!confirm('Opravdu chcete tuto službu odstranit z nabídky? (Historie rezervací zůstane zachována)')) return
 
     try {
+      // Místo DELETE děláme UPDATE is_active = false
       const { error } = await supabase
         .from('services')
-        .delete()
+        .update({ is_active: false })
         .eq('id', id)
 
-      if (error) {
-        // Detekce Foreign Key Constraint (kód 23503 v Postgres)
-        if (error.code === '23503') {
-          toast.error("Tuto službu nelze smazat, protože už na ni existují rezervace. (Historie musí zůstat zachována).", {
-            duration: 5000,
-            icon: <AlertCircle className="h-5 w-5 text-red-500"/>
-          })
-        } else {
-          throw error
-        }
-      } else {
-        toast.success("Služba byla smazána")
-        setServices(services.filter(s => s.id !== id))
-      }
+      if (error) throw error
+
+      toast.success("Služba byla odstraněna z nabídky")
+      // Odebereme ji lokálně ze seznamu
+      setServices(services.filter(s => s.id !== id))
+      
     } catch (error: any) {
       console.error(error)
-      // Pokud to nebyla chyba 23503, zobrazíme obecnou chybu
-      if (error.code !== '23503') {
-          toast.error("Chyba při mazání: " + error.message)
-      }
+      toast.error("Chyba při odstraňování: " + error.message)
     }
   }
 
