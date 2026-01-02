@@ -8,7 +8,7 @@ export const LandingHeader = () => {
       <Link className="flex items-center justify-center gap-2" href="#">
         
           <LogoIcon className="h-12 w-12 text-white" />
-        
+      
         <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
       </Link>
       <nav className="ml-auto flex gap-4 sm:gap-6 items-center">

@@ -5,16 +5,18 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Scissors, CheckCircle, Eye, EyeOff, ArrowLeft, Mail } from 'lucide-react'
+import { Eye, EyeOff, ArrowLeft, Mail, Loader2 } from 'lucide-react'
 import { toast } from "sonner"
+// Importujeme LogoIcon z komponent, přesně jako v LandingHeader
+import { LogoIcon } from "@/components/logo" 
 
-
-// Tím zabráníme jejímu neustálému znovuvytváření a ztrátě fokusu.
+// --- KOMPONENTA PRO HESLO ---
 const PasswordInput = ({ id, value, onChange }: any) => {
   const [showPassword, setShowPassword] = useState(false)
 
@@ -27,7 +29,7 @@ const PasswordInput = ({ id, value, onChange }: any) => {
         onChange={onChange} 
         required 
         minLength={6}
-        className="pr-10" 
+        className="pr-10 bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]" 
       />
       <button
         type="button"
@@ -48,13 +50,11 @@ export default function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   
-  // NOVÉ: Stavy pro registraci
+  // Stavy pro registraci
   const [fullName, setFullName] = useState('')
   const [salonName, setSalonName] = useState('')
 
   const [loading, setLoading] = useState(false)
-  
-  // UX Stavy
   const [view, setView] = useState<'auth' | 'reset'>('auth') 
 
   // --- 1. PŘIHLÁŠENÍ ---
@@ -78,7 +78,6 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
 
-    // Validace jména
     if (!fullName.trim()) {
         toast.error('Prosím vyplňte své jméno.')
         setLoading(false)
@@ -88,10 +87,9 @@ export default function AuthPage() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      // ZDE SE DĚJE KOUZLO: Posíláme data do SQL triggeru
       options: { 
         data: { 
-            full_name: fullName, // Toto se zapíše do Profiles.full_name
+            full_name: fullName,
             salon_name: salonName || 'Můj Nový Salon',
             role: 'owner'
         } 
@@ -101,8 +99,7 @@ export default function AuthPage() {
     if (error) {
       toast.error(error.message)
     } else {
-      toast.success('Účet vytvořen! Nyní se můžete přihlásit.')
-      // Volitelně můžeme uživatele rovnou přesměrovat nebo přepnout tab
+      toast.success('Účet vytvořen! Zkontrolujte email nebo se přihlašte.')
     }
     setLoading(false)
   }
@@ -130,19 +127,20 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F5E6] p-4 font-sans">
       
-      {/* Logo */}
-      <div className="mb-8 flex items-center gap-2 text-2xl font-bold text-slate-800">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-900 text-white">
-          <Scissors className="h-5 w-5" />
-        </div>
-        APIS
+      {/* Logo Component - Přesně podle LandingHeader */}
+      <div className="mb-8">
+        <Link className="flex items-center justify-center gap-2" href="/">
+           {/* Používáme text-[#F4C430] (medová žlutá) pro ikonu na světlém pozadí */}
+           <LogoIcon className="h-12 w-12 text-[#F4C430]" />
+           <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
+        </Link>
       </div>
 
       {/* --- OBRAZOVKA: RESET HESLA --- */}
       {view === 'reset' ? (
-        <Card className="w-full max-w-[400px]">
+        <Card className="w-full max-w-[400px] border-none shadow-xl shadow-slate-200/50">
           <CardHeader>
             <CardTitle>Obnova hesla</CardTitle>
             <CardDescription>Zadejte svůj e-mail a my vám pošleme instrukce.</CardDescription>
@@ -157,20 +155,21 @@ export default function AuthPage() {
                     id="email-reset" 
                     type="email" 
                     placeholder="salon@example.com" 
-                    className="pl-9"
+                    className="pl-9 bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
                     value={email} 
                     onChange={e => setEmail(e.target.value)} 
                     required 
                   />
                 </div>
               </div>
-              <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={loading}>
+              <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold" disabled={loading}>
+                {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
                 {loading ? 'Odesílám...' : 'Odeslat odkaz pro obnovu'}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="flex justify-center">
-            <Button variant="link" onClick={() => setView('auth')} className="text-slate-500">
+            <Button variant="link" onClick={() => setView('auth')} className="text-slate-500 hover:text-[#1A1A1A]">
               <ArrowLeft className="mr-2 h-4 w-4" /> Zpět na přihlášení
             </Button>
           </CardFooter>
@@ -180,23 +179,31 @@ export default function AuthPage() {
       /* --- OBRAZOVKA: LOGIN / REGISTRACE --- */
       <Tabs defaultValue="login" className="w-full max-w-[400px]">
         
-        <TabsList className="grid w-full grid-cols-2 mb-4">
-          <TabsTrigger value="login">Přihlášení</TabsTrigger>
-          <TabsTrigger value="register">Registrace</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-200/50 p-1 rounded-xl">
+          <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#1A1A1A] data-[state=active]:shadow-sm">Přihlášení</TabsTrigger>
+          <TabsTrigger value="register" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#1A1A1A] data-[state=active]:shadow-sm">Registrace</TabsTrigger>
         </TabsList>
 
         {/* LOGIN FORM */}
         <TabsContent value="login">
-          <Card>
+          <Card className="border-none shadow-xl shadow-slate-200/50">
             <CardHeader>
-              <CardTitle>Vítejte zpět</CardTitle>
-              <CardDescription>Přihlaste se do svého salonu.</CardDescription>
+              <CardTitle className="text-xl">Vítejte zpět</CardTitle>
+              <CardDescription>Přihlaste se do správy svého salonu.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email-login">Email</Label>
-                  <Input id="email-login" type="email" placeholder="salon@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+                  <Input 
+                    id="email-login" 
+                    type="email" 
+                    placeholder="salon@example.com" 
+                    value={email} 
+                    onChange={e => setEmail(e.target.value)} 
+                    required 
+                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
+                  />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -204,19 +211,19 @@ export default function AuthPage() {
                     <button 
                       type="button"
                       onClick={() => setView('reset')}
-                      className="text-xs text-slate-500 hover:text-slate-800 hover:underline"
+                      className="text-xs text-slate-500 hover:text-[#F4C430] hover:underline font-medium"
                     >
                       Zapomněli jste heslo?
                     </button>
                   </div>
-                  {/* Použití komponenty */}
                   <PasswordInput 
                     id="pass-login" 
                     value={password} 
                     onChange={(e: any) => setPassword(e.target.value)} 
                   />
                 </div>
-                <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={loading}>
+                <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold h-11" disabled={loading}>
+                  {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
                   {loading ? 'Pracuji...' : 'Přihlásit se'}
                 </Button>
               </form>
@@ -226,15 +233,14 @@ export default function AuthPage() {
 
         {/* REGISTER FORM */}
         <TabsContent value="register">
-          <Card>
+          <Card className="border-none shadow-xl shadow-slate-200/50">
             <CardHeader>
-              <CardTitle>Nový účet</CardTitle>
-              <CardDescription>Začněte používat APIS zdarma.</CardDescription>
+              <CardTitle className="text-xl">Nový účet</CardTitle>
+              <CardDescription>Začněte používat APIS zdarma ještě dnes.</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUp} className="space-y-4">
                 
-                {/* 1. Pole: Jméno (NOVÉ) */}
                 <div className="space-y-2">
                   <Label htmlFor="fullname-reg">Jméno a Příjmení</Label>
                   <Input 
@@ -243,10 +249,10 @@ export default function AuthPage() {
                     value={fullName} 
                     onChange={e => setFullName(e.target.value)} 
                     required 
+                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
                   />
                 </div>
 
-                {/* 2. Pole: Název Salonu (NOVÉ) */}
                 <div className="space-y-2">
                   <Label htmlFor="salon-reg">Název Salonu</Label>
                   <Input 
@@ -254,12 +260,21 @@ export default function AuthPage() {
                     placeholder="Studio Exclusive" 
                     value={salonName} 
                     onChange={e => setSalonName(e.target.value)} 
+                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="email-reg">Email</Label>
-                  <Input id="email-reg" type="email" placeholder="admin@test.cz" value={email} onChange={e => setEmail(e.target.value)} required />
+                  <Input 
+                    id="email-reg" 
+                    type="email" 
+                    placeholder="admin@test.cz" 
+                    value={email} 
+                    onChange={e => setEmail(e.target.value)} 
+                    required 
+                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pass-reg">Heslo</Label>
@@ -268,9 +283,10 @@ export default function AuthPage() {
                     value={password} 
                     onChange={(e: any) => setPassword(e.target.value)} 
                   />
-                  <p className="text-[10px] text-muted-foreground">Minimálně 6 znaků.</p>
+                  <p className="text-[10px] text-slate-500">Minimálně 6 znaků.</p>
                 </div>
-                <Button type="submit" className="w-full bg-slate-900 hover:bg-slate-800" disabled={loading}>
+                <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold h-11" disabled={loading}>
+                  {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
                   {loading ? 'Vytvářím účet...' : 'Vytvořit účet'}
                 </Button>
               </form>
