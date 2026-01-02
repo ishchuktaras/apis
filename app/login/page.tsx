@@ -47,6 +47,11 @@ export default function AuthPage() {
   // Stavy formulářů
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  
+  // NOVÉ: Stavy pro registraci
+  const [fullName, setFullName] = useState('')
+  const [salonName, setSalonName] = useState('')
+
   const [loading, setLoading] = useState(false)
   
   // UX Stavy
@@ -73,16 +78,31 @@ export default function AuthPage() {
     e.preventDefault()
     setLoading(true)
 
+    // Validace jména
+    if (!fullName.trim()) {
+        toast.error('Prosím vyplňte své jméno.')
+        setLoading(false)
+        return
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: 'Nový Salon' } },
+      // ZDE SE DĚJE KOUZLO: Posíláme data do SQL triggeru
+      options: { 
+        data: { 
+            full_name: fullName, // Toto se zapíše do Profiles.full_name
+            salon_name: salonName || 'Můj Nový Salon',
+            role: 'owner'
+        } 
+      },
     })
 
     if (error) {
       toast.error(error.message)
     } else {
       toast.success('Účet vytvořen! Nyní se můžete přihlásit.')
+      // Volitelně můžeme uživatele rovnou přesměrovat nebo přepnout tab
     }
     setLoading(false)
   }
@@ -213,6 +233,30 @@ export default function AuthPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSignUp} className="space-y-4">
+                
+                {/* 1. Pole: Jméno (NOVÉ) */}
+                <div className="space-y-2">
+                  <Label htmlFor="fullname-reg">Jméno a Příjmení</Label>
+                  <Input 
+                    id="fullname-reg" 
+                    placeholder="Jan Novák" 
+                    value={fullName} 
+                    onChange={e => setFullName(e.target.value)} 
+                    required 
+                  />
+                </div>
+
+                {/* 2. Pole: Název Salonu (NOVÉ) */}
+                <div className="space-y-2">
+                  <Label htmlFor="salon-reg">Název Salonu</Label>
+                  <Input 
+                    id="salon-reg" 
+                    placeholder="Studio Exclusive" 
+                    value={salonName} 
+                    onChange={e => setSalonName(e.target.value)} 
+                  />
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="email-reg">Email</Label>
                   <Input id="email-reg" type="email" placeholder="admin@test.cz" value={email} onChange={e => setEmail(e.target.value)} required />
