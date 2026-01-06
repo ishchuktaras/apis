@@ -1,5 +1,4 @@
 // middleware.ts
-
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
@@ -31,22 +30,30 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Získání uživatele. 
-  // POZOR: getUser() je bezpečnější než getSession() v middleware
+  // Získání uživatele
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const path = request.nextUrl.pathname
+  const url = request.nextUrl
+  const path = url.pathname
 
-  // 1. Ochrana /dashboard: Pokud není uživatel, přesměrovat na /login
-  if (path.startsWith('/dashboard') && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+  // OCHRANA PROTI SMYČKÁM:
+  // Pokud jsme na veřejné stránce a uživatel NENÍ přihlášen,
+  // vrátíme response rovnou, abychom neriskovali redirecty.
+  // (Předpokládám, že /dashboard je jediná chráněná sekce)
+  const isProtectedRoute = path.startsWith('/dashboard')
+  const isAuthRoute = path === '/login'
+
+  // 1. Ochrana /dashboard
+  if (isProtectedRoute && !user) {
+    // Použij url.origin pro absolutní URL, je to bezpečnější
+    return NextResponse.redirect(new URL('/login', url.origin))
   }
 
-  // 2. Přesměrování z /login: Pokud už je přihlášený, nepustit ho na login, ale rovnou do dashboardu
-  if (path === '/login' && user) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  // 2. Přesměrování z /login
+  if (isAuthRoute && user) {
+    return NextResponse.redirect(new URL('/dashboard', url.origin))
   }
 
   return response
@@ -55,11 +62,12 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
+     * Optimalizovaný matcher.
+     * Vynecháváme statické soubory, obrázky, favicon, ALE
+     * stále spouštíme middleware na všech stránkách (kvůli session refresh).
+     * Pokud bys chtěl middleware ÚPLNĚ vypnout pro veřejný web,
+     * musel bys změnit matcher jen na ['/dashboard/:path*', '/login'],
+     * ale to by znamenalo, že se session neobnoví na pozadí při prohlížení webu.
      */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
