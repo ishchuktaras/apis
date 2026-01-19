@@ -13,6 +13,7 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "APIS - Systém pro moderní salony",
   description: "Vlastní web a rezervace pro kadeřnictví a beauty salony.",
+    generator: 'v0.app'
 };
 
 export default function RootLayout({
