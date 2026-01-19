@@ -1,0 +1,47 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Next.js
+.next
+out
+
+# Testing
+coverage
+.nyc_output
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment files (handled by Coolify)
+.env
+.env.local
+.env.development
+.env.production
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs
+*.md
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Misc
+*.log
+*.tmp
+.cache
