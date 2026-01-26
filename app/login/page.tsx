@@ -1,11 +1,9 @@
-// app/login/page.tsx
-
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { signIn } from 'next-auth/react' 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,11 +11,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Eye, EyeOff, ArrowLeft, Mail, Loader2 } from 'lucide-react'
 import { toast } from "sonner"
-// Importujeme LogoIcon z komponent, přesně jako v LandingHeader
 import { LogoIcon } from "@/components/logo" 
 
-// --- KOMPONENTA PRO HESLO ---
-const PasswordInput = ({ id, value, onChange }: any) => {
+// --- 1. DEFINICE TYPŮ (Aby ESLint nehlásil chybu) ---
+interface PasswordInputProps {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+// --- 2. KOMPONENTA PRO HESLO (Typovaná) ---
+const PasswordInput = ({ id, value, onChange }: PasswordInputProps) => {
   const [showPassword, setShowPassword] = useState(false)
 
   return (
@@ -57,23 +61,34 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [view, setView] = useState<'auth' | 'reset'>('auth') 
 
-  // --- 1. PŘIHLÁŠENÍ ---
+  // --- 3. PŘIHLÁŠENÍ (NextAuth - VPS) ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      // Voláme NextAuth Credentials Provider
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false, 
+      })
 
-    if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Vítejte zpět!')
-      router.push('/dashboard')
+      if (result?.error) {
+        toast.error('Neplatný email nebo heslo.')
+      } else {
+        toast.success('Vítejte zpět!')
+        router.push('/dashboard')
+        router.refresh() 
+      }
+    } catch (error) {
+      toast.error('Něco se pokazilo při přihlašování.')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  // --- 2. REGISTRACE ---
+  // --- 4. REGISTRACE (API Volání na VPS) ---
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
@@ -84,55 +99,52 @@ export default function AuthPage() {
         return
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { 
-        data: { 
-            full_name: fullName,
-            salon_name: salonName || 'Můj Nový Salon',
-            role: 'owner'
-        } 
-      },
-    })
-
-    if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Účet vytvořen! Zkontrolujte email nebo se přihlašte.')
-    }
-    setLoading(false)
-  }
-
-  // --- 3. RESET HESLA ---
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard/settings`,
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          salonName: salonName || 'Můj Nový Salon'
+        })
       })
 
-      if (error) throw error
+      const data = await response.json()
 
-      toast.success('Odkaz pro obnovu hesla byl odeslán na váš email.')
-      setView('auth') 
+      if (!response.ok) {
+        throw new Error(data.error || 'Chyba při registraci')
+      }
 
-    } catch (error: any) {
-      toast.error(error.message)
+      toast.success('Účet vytvořen! Nyní se můžete přihlásit.')
+      setPassword('') // Vyčistit heslo pro bezpečnost
+      
+      // Volitelně přepnout tab na přihlášení, pokud to UI umožňuje,
+      // nebo nechat uživatele kliknout na "Přihlášení".
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Chyba při registraci'
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
+  // --- 5. RESET HESLA ---
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    // Zde by později přišlo volání API pro odeslání e-mailu (např. přes Resend)
+    toast.info('Funkce obnovy hesla bude brzy dostupná.')
+    setView('auth')
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F5E6] p-4 font-sans">
       
-      {/* Logo Component - Přesně podle LandingHeader */}
+      {/* Logo Component */}
       <div className="mb-8">
         <Link className="flex items-center justify-center gap-2" href="/">
-           {/* Používáme text-[#F4C430] (medová žlutá) pro ikonu na světlém pozadí */}
            <LogoIcon className="h-12 w-12 text-[#F4C430]" />
            <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
         </Link>
@@ -216,10 +228,11 @@ export default function AuthPage() {
                       Zapomněli jste heslo?
                     </button>
                   </div>
+                  {/* Použití komponenty bez 'any' */}
                   <PasswordInput 
                     id="pass-login" 
                     value={password} 
-                    onChange={(e: any) => setPassword(e.target.value)} 
+                    onChange={(e) => setPassword(e.target.value)} 
                   />
                 </div>
                 <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold h-11" disabled={loading}>
@@ -278,10 +291,11 @@ export default function AuthPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="pass-reg">Heslo</Label>
+                  {/* Použití komponenty bez 'any' */}
                   <PasswordInput 
                     id="pass-reg" 
                     value={password} 
-                    onChange={(e: any) => setPassword(e.target.value)} 
+                    onChange={(e) => setPassword(e.target.value)} 
                   />
                   <p className="text-[10px] text-slate-500">Minimálně 6 znaků.</p>
                 </div>

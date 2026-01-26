@@ -6,6 +6,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// --- ENUMS ---
+
 enum Role {
   OWNER
   EMPLOYEE
@@ -19,10 +21,10 @@ enum BookingStatus {
   NO_SHOW
 }
 
-// --- AUTHENTICATION (Lucia Auth) ---
+// --- AUTHENTICATION ---
 
 model User {
-  id             String    @id
+  id             String    @id @default(uuid())
   email          String    @unique
   hashedPassword String    
   fullName       String?
@@ -38,14 +40,14 @@ model User {
 }
 
 model Session {
-  id        String   @id
+  id        String   @id @default(uuid())
   userId    String
   expiresAt DateTime
   
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// --- CORE TENANT ENTITIES ---
+// --- CORE TENANT ENTITIES (SaaS Structure) ---
 
 model Tenant {
   id            String   @id @default(uuid())
