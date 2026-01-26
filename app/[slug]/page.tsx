@@ -25,7 +25,7 @@ import { toast } from "sonner"
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-// Generická funkce pro fetch, aby vracela typ T
+// Generická funkce pro fetch s typovou bezpečností (náhrada za any)
 async function supabaseFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   const headers = {
     'apikey': SUPABASE_KEY,
@@ -72,6 +72,7 @@ interface Profile {
   logo_url: string
   description: string
   slug: string
+  // Pro zaměstnance
   full_name?: string
   role?: string
 }
@@ -96,6 +97,7 @@ interface TimeSlot {
   reason?: string
 }
 
+// Typ pro data rezervace z databáze
 interface BookingRecord {
   start_time: string;
   user_id: string;
@@ -299,7 +301,6 @@ function TimeSelection({ selectedDate, onDateChange, availableSlots, selectedTim
                       <Info className="h-5 w-5"/> Pro tento den je plno nebo zavřeno.
                   </div> :
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4 max-h-80 overflow-y-auto pr-2">
-              {/* Zde byla chyba, 'slot' je nyní automaticky typován jako TimeSlot */}
               {availableSlots.map((slot) => (
                   <button 
                   key={slot.time} 
