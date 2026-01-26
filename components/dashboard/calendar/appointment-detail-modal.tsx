@@ -1,11 +1,13 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, User, CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
+import { X, Calendar, User, MapPin, AlertCircle } from 'lucide-react';
 
 // --- DEFINICE TYPŮ ---
 
 export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
 
-interface Appointment {
+export interface Appointment {
   id: string;
   clientName: string;
   serviceName: string;
@@ -16,35 +18,41 @@ interface Appointment {
   hasArrived: boolean; // Pole pro fyzickou přítomnost
 }
 
-interface AppointmentDetailModalProps {
+export interface AppointmentDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  appointment: Appointment;
+  appointment: Appointment | null; // Povolíme null
   onSave: (updatedAppointment: Appointment) => void;
 }
 
 // --- HLAVNÍ KOMPONENTA MODÁLNÍHO OKNA ---
 
 export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }: AppointmentDetailModalProps) {
-  const [status, setStatus] = useState<AppointmentStatus>(appointment.status);
-  const [hasArrived, setHasArrived] = useState<boolean>(appointment.hasArrived);
+  // Bezpečná inicializace state
+  const [status, setStatus] = useState<AppointmentStatus>(appointment?.status || 'PENDING');
+  const [hasArrived, setHasArrived] = useState<boolean>(appointment?.hasArrived || false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset state when modal opens with new appointment
+  // OPRAVA: Závislosti zredukovány jen na ID a isOpen.
+  // Formulář se resetuje jen když se otevře okno nebo změní rezervace (ID).
+  // Tím zabráníme cyklickým renderům.
   useEffect(() => {
-    setStatus(appointment.status);
-    setHasArrived(appointment.hasArrived);
-    setError(null);
-  }, [appointment, isOpen]);
+    if (isOpen && appointment) {
+      setStatus(appointment.status);
+      setHasArrived(appointment.hasArrived);
+      setError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, appointment?.id]); 
 
-  if (!isOpen) return null;
+  // Pokud okno není otevřené nebo chybí data, nic nevykreslujeme
+  if (!isOpen || !appointment) return null;
 
   const handleCheckInToggle = () => {
     const newValue = !hasArrived;
     setHasArrived(newValue);
     
     // Pokud odškrtneme, že dorazil, a status byl "Proběhlo", vrátíme ho na "Potvrzeno"
-    // aby nedocházelo k nekonzistenci dat.
     if (!newValue && status === 'COMPLETED') {
       setStatus('CONFIRMED');
     }
@@ -54,7 +62,7 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
   const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newStatus = e.target.value as AppointmentStatus;
 
-    // VALIDACE: (Pojistka, i když je option skrytý)
+    // VALIDACE
     if (newStatus === 'COMPLETED' && !hasArrived) {
       setError('Nelze označit jako "Proběhlo", dokud není potvrzena fyzická návštěva (Check-in).');
       return;
@@ -65,12 +73,13 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
   };
 
   const handleSave = () => {
-    onSave({
-      ...appointment,
-      status,
-      hasArrived
-    });
-    // onClose(); // Necháme rodiče zavřít okno až po úspěšném uložení (async)
+    if (appointment) {
+      onSave({
+        ...appointment,
+        status,
+        hasArrived
+      });
+    }
   };
 
   return (
@@ -124,8 +133,7 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
 
           <hr className="border-slate-100" />
 
-          {/* CHECK-IN SEKCE - Klíčová logika */}
-          {/* Zde je to místo, kde administrátor/zaměstnanec klikne, když klient vejde do dveří */}
+          {/* CHECK-IN SEKCE */}
           <div className={`p-4 rounded-lg border transition-colors ${hasArrived ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -170,7 +178,6 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
               <option value="PENDING">⏳ Čeká na potvrzení</option>
               <option value="CONFIRMED">✅ Potvrzeno (Zarezervováno)</option>
               
-              {/* ZMĚNA: Option "Proběhlo" se zobrazí pouze pokud je potvrzen příchod */}
               {(hasArrived || status === 'COMPLETED') && (
                 <option value="COMPLETED">
                   🏁 Proběhlo (Zaplaceno a hotovo)
@@ -181,7 +188,6 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
               <option value="CANCELLED">❌ Zrušeno</option>
             </select>
             
-            {/* Chybová hláška */}
             {error && (
               <div className="flex items-center gap-2 text-red-600 text-sm mt-2 bg-red-50 p-2 rounded animate-in slide-in-from-top-1">
                 <AlertCircle size={16} />
@@ -192,7 +198,8 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
             {!hasArrived && status !== 'COMPLETED' && (
                <p className="text-xs text-slate-500 mt-1 ml-1 flex items-center gap-1">
                  <AlertCircle size={12} />
-                 Možnost "Proběhlo" se odemkne až po potvrzení příchodu výše.
+                 {/* OPRAVA: Nahrazeny uvozovky za &quot; */}
+                 Možnost &quot;Proběhlo&quot; se odemkne až po potvrzení příchodu výše.
                </p>
             )}
           </div>
@@ -218,3 +225,6 @@ export function AppointmentDetailModal({ isOpen, onClose, appointment, onSave }:
     </div>
   );
 }
+
+// Přidán default export pro jistotu, aby fungovaly oba typy importů
+export default AppointmentDetailModal;

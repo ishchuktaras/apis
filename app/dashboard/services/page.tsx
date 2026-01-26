@@ -1,5 +1,3 @@
-// app/dashboard/services/page.tsx
-
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -65,7 +63,7 @@ export default function ServicesPage() {
 
       if (error) throw error
       setServices(data || [])
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Chyba:', error)
       toast.error('Nepodařilo se načíst služby')
     } finally {
@@ -114,8 +112,9 @@ export default function ServicesPage() {
       resetForm()
       fetchServices()
 
-    } catch (error: any) {
-      toast.error('Chyba: ' + error.message)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Neznámá chyba'
+      toast.error('Chyba: ' + msg)
     } finally {
       setIsSubmitting(false)
     }
@@ -138,9 +137,10 @@ export default function ServicesPage() {
       // Odebereme ji lokálně ze seznamu
       setServices(services.filter(s => s.id !== id))
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
-      toast.error("Chyba při odstraňování: " + error.message)
+      const msg = error instanceof Error ? error.message : 'Neznámá chyba'
+      toast.error("Chyba při odstraňování: " + msg)
     }
   }
 

@@ -40,21 +40,21 @@ export function Sidebar() {
   const [profile, setProfile] = useState<SidebarProfile | null>(null)
 
   useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('salon_name, logo_url, slug')
+        .eq('id', user.id)
+        .single()
+      
+      if (data) setProfile(data)
+    }
+
     fetchProfile()
   }, [])
-
-  const fetchProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    const { data } = await supabase
-      .from('profiles')
-      .select('salon_name, logo_url, slug')
-      .eq('id', user.id)
-      .single()
-    
-    if (data) setProfile(data)
-  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
