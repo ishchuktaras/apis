@@ -25,7 +25,7 @@ import { toast } from "sonner"
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-// Generická funkce pro fetch s typovou bezpečností (náhrada za any)
+// Generická funkce pro fetch s typovou bezpečností
 async function supabaseFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   const headers = {
     'apikey': SUPABASE_KEY,
@@ -72,7 +72,6 @@ interface Profile {
   logo_url: string
   description: string
   slug: string
-  // Pro zaměstnance
   full_name?: string
   role?: string
 }
@@ -97,7 +96,6 @@ interface TimeSlot {
   reason?: string
 }
 
-// Typ pro data rezervace z databáze
 interface BookingRecord {
   start_time: string;
   user_id: string;
