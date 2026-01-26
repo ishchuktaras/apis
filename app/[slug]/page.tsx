@@ -7,7 +7,6 @@ import {
   MapPin, 
   Phone, 
   CheckCircle2, 
-  AlertCircle, 
   Loader2, 
   ChevronLeft, 
   ChevronRight, 
@@ -26,7 +25,8 @@ import { toast } from "sonner"
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
 
-async function supabaseFetch(endpoint: string, options: RequestInit = {}) {
+// Generická funkce pro fetch, aby vracela typ T
+async function supabaseFetch<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   const headers = {
     'apikey': SUPABASE_KEY,
     'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -42,10 +42,9 @@ async function supabaseFetch(endpoint: string, options: RequestInit = {}) {
      const error = await response.json().catch(() => ({ message: response.statusText }))
      throw new Error(error.message || `API Error: ${response.status}`)
   }
-  return response.json()
+  return response.json() as Promise<T>
 }
 
-// Funkce pro sjednocení formátu času na "HH:MM" (vždy 2 cifry)
 const normalizeTime = (timeStr: string) => {
   if (!timeStr) return '';
   const parts = timeStr.split(':');
@@ -55,18 +54,7 @@ const normalizeTime = (timeStr: string) => {
   return `${h}:${m}`;
 }
 
-const generateEmailHtml = (name: string, salonName: string, date: string, time: string, service: string) => {
-  return `
-    <div style="font-family: sans-serif; color: #333;">
-      <h1>Nová rezervace: ${salonName}</h1>
-      <p>Klient: <strong>${name}</strong></p>
-      <p>Služba: <strong>${service}</strong></p>
-      <p>Datum: <strong>${date}</strong> v <strong>${time}</strong></p>
-    </div>
-  `
-}
-
-// --- 2. DEFINICE TYPŮ ---
+// --- 2. DEFINICE TYPŮ (INTERFACES) ---
 
 interface Service {
   id: string
@@ -84,6 +72,8 @@ interface Profile {
   logo_url: string
   description: string
   slug: string
+  full_name?: string
+  role?: string
 }
 
 interface BusinessHour {
@@ -104,6 +94,11 @@ interface TimeSlot {
   time: string
   available: boolean
   reason?: string
+}
+
+interface BookingRecord {
+  start_time: string;
+  user_id: string;
 }
 
 // --- 3. SUB-KOMPONENTY (UI) ---
@@ -140,14 +135,20 @@ function SalonHeader({ profile }: { profile: Profile }) {
   )
 }
 
-function ServiceSelection({ services, selectedServiceId, onSelect }: { services: Service[], selectedServiceId: string | null, onSelect: (id: string) => void }) {
+interface ServiceSelectionProps {
+  services: Service[]
+  selectedServiceId: string | null
+  onSelect: (id: string) => void
+}
+
+function ServiceSelection({ services, selectedServiceId, onSelect }: ServiceSelectionProps) {
   return (
     <section className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 fade-in">
       <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
           <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">1</span> Vyberte službu
           </h2>
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 1/3</span>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 1/4</span>
       </div>
       <div className="grid gap-3">
         {services.length === 0 ? (
@@ -184,18 +185,94 @@ function ServiceSelection({ services, selectedServiceId, onSelect }: { services:
   )
 }
 
-function TimeSelection({ selectedDate, onDateChange, availableSlots, selectedTime, onTimeSelect, loadingSlots, onBack }: any) {
+interface StaffSelectionProps {
+  staff: Profile[]
+  selectedStaffId: string | null
+  onSelect: (id: string | null) => void
+  onBack: () => void
+}
+
+function StaffSelection({ staff, selectedStaffId, onSelect, onBack }: StaffSelectionProps) {
   return (
     <section className="space-y-6 animate-in slide-in-from-right-8 duration-300 fade-in">
       <div className="flex items-center justify-between">
           <button onClick={onBack} className="pl-0 text-slate-500 hover:text-slate-900 mb-2 group h-auto py-0 hover:bg-transparent flex items-center text-sm font-medium">
             <ChevronLeft className="h-4 w-4 mr-1 group-hover:-translate-x-1 transition-transform"/> Zpět
           </button>
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 2/3</span>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 2/4</span>
       </div>
 
       <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
-        <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">2</span> Vyberte termín
+        <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">2</span> Vyberte specialistu
+      </h2>
+      
+      <div className="grid gap-3">
+        {/* Možnost: Kdokoliv */}
+        <div 
+          className={`cursor-pointer border rounded-xl p-4 transition-all duration-200 hover:shadow-sm flex items-center gap-4 ${selectedStaffId === null ? 'border-[#F4C430] bg-[#FFFDF5] ring-1 ring-[#F4C430]' : 'border-slate-200 bg-white hover:border-[#F4C430]/50'}`}
+          onClick={() => onSelect(null)}
+        >
+          <div className="h-12 w-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-500">
+            <User className="h-6 w-6" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg text-slate-900">První volný termín</h3>
+            <p className="text-sm text-slate-500">Nezáleží mi na tom, kdo mě obslouží</p>
+          </div>
+          <div className="ml-auto">
+             <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedStaffId === null ? 'border-[#F4C430] bg-[#F4C430] text-slate-900' : 'border-slate-300 bg-transparent'}`}>
+                {selectedStaffId === null && <Check className="h-3 w-3" />}
+             </div>
+          </div>
+        </div>
+
+        {/* Seznam zaměstnanců */}
+        {staff.map(member => (
+          <div key={member.id} 
+            className={`cursor-pointer border rounded-xl p-4 transition-all duration-200 hover:shadow-sm flex items-center gap-4 ${selectedStaffId === member.id ? 'border-[#F4C430] bg-[#FFFDF5] ring-1 ring-[#F4C430]' : 'border-slate-200 bg-white hover:border-[#F4C430]/50'}`}
+            onClick={() => onSelect(member.id)}
+          >
+            <div className="h-12 w-12 bg-slate-900 text-white rounded-full flex items-center justify-center font-bold text-lg">
+              {member.full_name?.charAt(0) || <User className="h-6 w-6" />}
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg text-slate-900">{member.full_name || 'Specialista'}</h3>
+              <p className="text-sm text-slate-500">{member.role === 'OWNER' ? 'Majitel' : 'Stylista'}</p>
+            </div>
+            <div className="ml-auto">
+                <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedStaffId === member.id ? 'border-[#F4C430] bg-[#F4C430] text-slate-900' : 'border-slate-300 bg-transparent'}`}>
+                  {selectedStaffId === member.id && <Check className="h-3 w-3" />}
+                </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+interface TimeSelectionProps {
+  selectedDate: string
+  onDateChange: (date: string) => void
+  availableSlots: TimeSlot[]
+  selectedTime: string | null
+  onTimeSelect: (time: string) => void
+  loadingSlots: boolean
+  onBack: () => void
+}
+
+function TimeSelection({ selectedDate, onDateChange, availableSlots, selectedTime, onTimeSelect, loadingSlots, onBack }: TimeSelectionProps) {
+  return (
+    <section className="space-y-6 animate-in slide-in-from-right-8 duration-300 fade-in">
+      <div className="flex items-center justify-between">
+          <button onClick={onBack} className="pl-0 text-slate-500 hover:text-slate-900 mb-2 group h-auto py-0 hover:bg-transparent flex items-center text-sm font-medium">
+            <ChevronLeft className="h-4 w-4 mr-1 group-hover:-translate-x-1 transition-transform"/> Zpět
+          </button>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 3/4</span>
+      </div>
+
+      <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
+        <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">3</span> Vyberte termín
       </h2>
       
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
@@ -222,7 +299,8 @@ function TimeSelection({ selectedDate, onDateChange, availableSlots, selectedTim
                       <Info className="h-5 w-5"/> Pro tento den je plno nebo zavřeno.
                   </div> :
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4 max-h-80 overflow-y-auto pr-2">
-              {availableSlots.map((slot: any) => (
+              {/* Zde byla chyba, 'slot' je nyní automaticky typován jako TimeSlot */}
+              {availableSlots.map((slot) => (
                   <button 
                   key={slot.time} 
                   disabled={!slot.available}
@@ -247,18 +325,29 @@ function TimeSelection({ selectedDate, onDateChange, availableSlots, selectedTim
   )
 }
 
-function ContactForm({ clientInfo, onClientInfoChange, termsAccepted, onTermsChange, onSubmit, onBack, salonName, isSubmitting }: any) {
+interface ContactFormProps {
+  clientInfo: ClientInfo
+  onClientInfoChange: (info: ClientInfo) => void
+  termsAccepted: boolean
+  onTermsChange: (accepted: boolean) => void
+  onSubmit: (e: React.FormEvent) => void
+  onBack: () => void
+  salonName: string
+  isSubmitting: boolean
+}
+
+function ContactForm({ clientInfo, onClientInfoChange, termsAccepted, onTermsChange, onSubmit, onBack, salonName, isSubmitting }: ContactFormProps) {
   return (
     <section className="space-y-6 animate-in slide-in-from-right-8 duration-300 fade-in">
        <div className="flex items-center justify-between">
           <button onClick={onBack} className="pl-0 text-slate-500 hover:text-slate-900 mb-2 group h-auto py-0 hover:bg-transparent flex items-center text-sm font-medium">
           <ChevronLeft className="h-4 w-4 mr-1 group-hover:-translate-x-1 transition-transform"/> Zpět
           </button>
-          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 3/3</span>
+          <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Krok 4/4</span>
       </div>
 
       <h2 className="text-lg font-bold flex items-center gap-3 text-slate-800">
-        <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">3</span> Vaše údaje
+        <span className="bg-slate-900 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shadow-md">4</span> Vaše údaje
       </h2>
 
       <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6">
@@ -327,20 +416,21 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
   // Data
   const [profile, setProfile] = useState<Profile | null>(null)
   const [services, setServices] = useState<Service[]>([])
+  const [staff, setStaff] = useState<Profile[]>([])
   const [businessHours, setBusinessHours] = useState<BusinessHour[]>([])
   
   // Stavy
   const [loading, setLoading] = useState(true)
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1) 
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1) 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Výběry
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null)
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [slots, setSlots] = useState<TimeSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
-  const [bookedTimes, setBookedTimes] = useState<string[]>([])
 
   // Formulář
   const [clientInfo, setClientInfo] = useState<ClientInfo>({ name: '', email: '', phone: '' })
@@ -351,15 +441,15 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
   }, [slug])
 
   useEffect(() => {
-    if (step === 2 && profile && selectedServiceId) {
+    if (step === 3 && profile && selectedServiceId) {
       calculateSlots()
     }
-  }, [selectedDate, step, selectedServiceId])
+  }, [selectedDate, step, selectedServiceId, selectedStaffId])
 
   const loadData = async () => {
     try {
       setLoading(true)
-      const profiles = await supabaseFetch(`profiles?slug=eq.${slug}&select=*`)
+      const profiles = await supabaseFetch<Profile[]>(`profiles?slug=eq.${slug}&select=*`)
       const profileData = profiles?.[0]
 
       if (!profileData) {
@@ -367,16 +457,17 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
         return
       }
       setProfile(profileData)
-      console.log('--- DB DEBUG ---')
-      console.log('Salon ID:', profileData.id)
-
-      const servicesData = await supabaseFetch(`services?user_id=eq.${profileData.id}&is_active=eq.true&order=price.asc`)
+      
+      const servicesData = await supabaseFetch<Service[]>(`services?user_id=eq.${profileData.id}&is_active=eq.true&order=price.asc`)
       setServices(servicesData || [])
 
-      const hoursData = await supabaseFetch(`business_hours?user_id=eq.${profileData.id}`)
+      const staffData = await supabaseFetch<Profile[]>(`profiles?tenant_id=eq.${profileData.id}&select=id,full_name,role`)
+      setStaff(staffData || [])
+
+      const hoursData = await supabaseFetch<BusinessHour[]>(`business_hours?user_id=eq.${profileData.id}`)
       setBusinessHours(hoursData || [])
 
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
       toast.error("Chyba načítání")
     } finally {
@@ -384,32 +475,15 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
     }
   }
 
-  // --- KLÍČOVÁ LOGIKA VÝPOČTU SLOTŮ (S LEPSIM DEBUGGINGEM A MATCHINGEM) ---
   const calculateSlots = async () => {
     if (!profile || !selectedServiceId) return
     setSlotsLoading(true)
     setSlots([])
 
     try {
-      // 1. Bookings pro den (podle booking_date)
-      console.log('Checking bookings for:', selectedDate, 'Salon:', profile.id);
+      // Použití generického typu pro správné typování odpovědi
+      const bookingsData = await supabaseFetch<BookingRecord[]>(`bookings?salon_id=eq.${profile.id}&booking_date=eq.${selectedDate}&status=neq.cancelled`)
       
-      const bookingsData = await supabaseFetch(`bookings?salon_id=eq.${profile.id}&booking_date=eq.${selectedDate}&status=neq.cancelled`)
-      
-      console.log('Raw DB Bookings:', bookingsData); // Zde uvidíte, co DB skutečně vrátila
-
-      // Robustní extrakce času (např. "09:00:00" -> "09:00")
-      const bookedStartTimes = (bookingsData || []).map((b: any) => {
-          if (typeof b.start_time === 'string') {
-             return normalizeTime(b.start_time);
-          }
-          return '';
-      }).filter(Boolean);
-      
-      setBookedTimes(bookedStartTimes)
-      console.log('Normalized Booked Times:', bookedStartTimes);
-
-      // 2. Logika slotů
       const service = services.find(s => s.id === selectedServiceId)
       const serviceDuration = service?.duration_minutes || 30
 
@@ -435,6 +509,8 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
       const isToday = selectedDate === now.toISOString().split('T')[0]
       const currentNowMinutes = now.getHours() * 60 + now.getMinutes()
 
+      const totalCapacity = selectedStaffId ? 1 : staff.length || 1;
+
       while (currentMinutes + serviceDuration <= closeMinutes) {
         const h = Math.floor(currentMinutes / 60).toString().padStart(2, '0')
         const m = (currentMinutes % 60).toString().padStart(2, '0')
@@ -448,10 +524,24 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
            reason = 'Příliš brzy'
         }
 
-        // KONTROLA KOLIZE (ROBUSTNÍ)
-        if (bookedStartTimes.includes(timeStr)) {
-            available = false
-            reason = 'Obsazeno'
+        if (available) {
+            let conflictingBookingsCount = 0;
+
+            if (bookingsData) {
+                conflictingBookingsCount = bookingsData.filter((b) => {
+                    const bTime = normalizeTime(b.start_time);
+                    
+                    if (selectedStaffId && b.user_id !== selectedStaffId) {
+                        return false; 
+                    }
+                    return bTime === timeStr; 
+                }).length;
+            }
+
+            if (conflictingBookingsCount >= totalCapacity) {
+                available = false;
+                reason = 'Obsazeno';
+            }
         }
 
         generatedSlots.push({ time: timeStr, available, reason })
@@ -468,43 +558,38 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
     if (!profile || !selectedServiceId || !selectedTime) return
     
     setIsSubmitting(true)
-    console.log("Submitting booking..."); // Debug log
 
     try {
       const timeOnly = `${selectedTime}:00` 
 
-      // OPRAVENÁ DATA (mapování na customer_*)
       const payload = {
         salon_id: profile.id,
-        user_id: profile.id, // Fallback
+        user_id: selectedStaffId || profile.id, 
         service_id: selectedServiceId,
-        customer_name: clientInfo.name, // BYLO: client_name
-        customer_email: clientInfo.email, // BYLO: client_email
-        customer_phone: clientInfo.phone, // BYLO: client_phone
+        customer_name: clientInfo.name,
+        customer_email: clientInfo.email,
+        customer_phone: clientInfo.phone,
         start_time: timeOnly,
         booking_date: selectedDate,
         status: 'pending',
-        // note: clientInfo.note // Pokud DB nemá note, vynechat (v JSONu není)
       }
 
-      console.log("Payload:", payload); // Debug log
-
       await supabaseFetch('bookings', { method: 'POST', body: JSON.stringify(payload) })
-      setStep(4)
+      setStep(5)
       toast.success("Rezervace odeslána")
-    } catch (e: any) {
-      console.error("Booking Error:", e); // Debug log
-      toast.error("Chyba: " + e.message)
+    } catch (e: unknown) {
+      console.error("Booking Error:", e);
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+      toast.error("Chyba: " + errorMessage)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // --- RENDER ---
   if (loading) return <div className="flex h-screen items-center justify-center"><Loader2 className="animate-spin text-[#F4C430] w-10 h-10" /></div>
   if (!profile) return <div className="p-8 text-center">Salon nenalezen</div>
 
-  if (step === 4) {
+  if (step === 5) {
     return (
       <div className="min-h-screen bg-[#F8F5E6] flex items-center justify-center p-4 font-sans">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6">
@@ -522,8 +607,9 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
   const selectedService = services.find(s => s.id === selectedServiceId)
   const canProceed = () => {
     if (step === 1) return !!selectedServiceId
-    if (step === 2) return !!(selectedDate && selectedTime)
-    if (step === 3) return termsAccepted
+    if (step === 2) return true 
+    if (step === 3) return !!(selectedDate && selectedTime)
+    if (step === 4) return termsAccepted
     return false
   }
 
@@ -531,13 +617,57 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
     <div className="min-h-screen bg-[#F8F5E6] font-sans pb-24">
       <SalonHeader profile={profile} />
       <main className="max-w-3xl mx-auto px-4 py-8">
-        {step === 1 && <ServiceSelection services={services} selectedServiceId={selectedServiceId} onSelect={(id) => setSelectedServiceId(id)} />}
-        {step === 2 && <TimeSelection selectedDate={selectedDate} onDateChange={(date: string) => { setSelectedDate(date); setSelectedTime(null); }} availableSlots={slots} selectedTime={selectedTime} onTimeSelect={setSelectedTime} loadingSlots={slotsLoading} onBack={() => setStep(1)} />}
-        {step === 3 && <ContactForm clientInfo={clientInfo} onClientInfoChange={setClientInfo} termsAccepted={termsAccepted} onTermsChange={setTermsAccepted} onSubmit={handleBooking} onBack={() => setStep(2)} salonName={profile.salon_name} isSubmitting={isSubmitting} />}
+        
+        {step === 1 && (
+            <ServiceSelection 
+                services={services} 
+                selectedServiceId={selectedServiceId} 
+                onSelect={(id) => { 
+                    setSelectedServiceId(id); 
+                    setStep(2); 
+                }} 
+            />
+        )}
+
+        {step === 2 && (
+            <StaffSelection 
+                staff={staff} 
+                selectedStaffId={selectedStaffId} 
+                onSelect={(id) => { 
+                    setSelectedStaffId(id); 
+                    setStep(3); 
+                }} 
+                onBack={() => setStep(1)} 
+            />
+        )}
+
+        {step === 3 && (
+            <TimeSelection 
+                selectedDate={selectedDate} 
+                onDateChange={(date: string) => { setSelectedDate(date); setSelectedTime(null); }} 
+                availableSlots={slots} 
+                selectedTime={selectedTime} 
+                onTimeSelect={setSelectedTime} 
+                loadingSlots={slotsLoading} 
+                onBack={() => setStep(2)} 
+            />
+        )}
+
+        {step === 4 && (
+            <ContactForm 
+                clientInfo={clientInfo} 
+                onClientInfoChange={setClientInfo} 
+                termsAccepted={termsAccepted} 
+                onTermsChange={setTermsAccepted} 
+                onSubmit={handleBooking} 
+                onBack={() => setStep(3)} 
+                salonName={profile.salon_name} 
+                isSubmitting={isSubmitting} 
+            />
+        )}
       </main>
       
-      {/* FOOTER */}
-      {selectedService && step < 4 && (
+      {selectedService && step < 5 && (
         <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 p-4 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] z-50 animate-in slide-in-from-bottom-full duration-500">
           <div className="max-w-3xl mx-auto flex items-center justify-between">
             <div className="hidden sm:block">
@@ -548,17 +678,26 @@ export default function SalonPublicPage({ params }: { params: Promise<{ slug: st
               </div>
             </div>
             <div className="flex gap-3 w-full sm:w-auto">
+              
               {step === 1 && (
-                <button onClick={() => setStep(2)} className="w-full sm:w-auto h-12 px-8 bg-[#F4C430] hover:bg-[#E0B120] text-slate-900 shadow-lg shadow-[#F4C430]/20 transition-all hover:scale-[1.02] rounded-xl font-bold flex items-center justify-center">
+                <button onClick={() => setStep(2)} disabled={!canProceed()} className="w-full sm:w-auto h-12 px-8 bg-[#F4C430] hover:bg-[#E0B120] text-slate-900 shadow-lg shadow-[#F4C430]/20 transition-all hover:scale-[1.02] rounded-xl font-bold flex items-center justify-center disabled:opacity-50">
+                  Pokračovat <ChevronRight className="ml-2 h-5 w-5"/>
+                </button>
+              )}
+              
+              {step === 2 && (
+                <button onClick={() => setStep(3)} className="w-full sm:w-auto h-12 px-8 bg-[#F4C430] hover:bg-[#E0B120] text-slate-900 shadow-lg shadow-[#F4C430]/20 transition-all hover:scale-[1.02] rounded-xl font-bold flex items-center justify-center">
                   Vybrat termín <ChevronRight className="ml-2 h-5 w-5"/>
                 </button>
               )}
-              {step === 2 && (
-                <button disabled={!canProceed()} onClick={() => setStep(3)} className="w-full sm:w-auto h-12 px-8 bg-[#F4C430] hover:bg-[#E0B120] text-slate-900 shadow-lg shadow-[#F4C430]/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 rounded-xl font-bold flex items-center justify-center">
+
+              {step === 3 && (
+                <button disabled={!canProceed()} onClick={() => setStep(4)} className="w-full sm:w-auto h-12 px-8 bg-[#F4C430] hover:bg-[#E0B120] text-slate-900 shadow-lg shadow-[#F4C430]/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 rounded-xl font-bold flex items-center justify-center">
                   Zadat údaje <ChevronRight className="ml-2 h-5 w-5"/>
                 </button>
               )}
-              {step === 3 && (
+
+              {step === 4 && (
                 <button form="booking-form" type="submit" disabled={isSubmitting || !canProceed()} className="w-full sm:w-auto h-12 px-8 bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-600/20 transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100 rounded-xl font-bold flex items-center justify-center">
                   {isSubmitting ? 'Odesílám...' : 'Dokončit rezervaci'} <Check className="ml-2 h-5 w-5"/>
                 </button>

@@ -13,7 +13,7 @@ export const LandingCTA = () => {
         </p>
         <Link href="/login">
           <Button size="lg" className="bg-yellow-400 text-yellow-900 hover:bg-yellow-500 h-14 px-10 text-xl font-bold">
-            Vyzkoušet Salonio zdarma
+            Vyzkoušet APIS zdarma
           </Button>
         </Link>
       </div>

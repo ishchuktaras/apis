@@ -1,3 +1,5 @@
+// app/page.tsx
+
 import { LandingHeader } from "@/components/landing/Header"
 import { LandingHero } from "@/components/landing/Hero"
 import { LandingUSP } from "@/components/landing/USP"

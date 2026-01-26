@@ -4,17 +4,36 @@ import { useState, useEffect, use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CalendarX, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react'
+import { CalendarX, AlertCircle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
 
+// Typová definice pro data rezervace (spojení bookings + services + profiles)
+interface BookingDetails {
+  id: string
+  booking_date: string
+  start_time: string
+  customer_name: string
+  status: string
+  salon_id: string
+  services?: {
+    title: string
+    duration_minutes: number
+  } | null
+  profiles?: {
+    salon_name: string
+    slug: string
+  } | null
+}
+
 export default function CancelBookingPage({ params }: PageProps) {
   const { id } = use(params)
   
-  const [booking, setBooking] = useState<any>(null)
+  // Nahrazeno <any> za <BookingDetails | null>
+  const [booking, setBooking] = useState<BookingDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelled, setCancelled] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,8 +48,6 @@ export default function CancelBookingPage({ params }: PageProps) {
     try {
       setLoading(true)
       
-      // KROK 1: Načíst rezervaci a službu (vazba na služby je OK)
-      // Odstranili jsme "profiles" ze selectu, abychom se vyhnuli chybě 400
       const { data: bookingData, error: bookingError } = await supabase
         .from('bookings')
         .select(`
@@ -43,15 +60,13 @@ export default function CancelBookingPage({ params }: PageProps) {
       if (bookingError) throw bookingError
       if (!bookingData) throw new Error('Rezervace nebyla nalezena (neplatný odkaz).')
 
-      // KROK 2: Načíst profil salonu zvlášť (podle salon_id z rezervace)
       const { data: profileData } = await supabase
         .from('profiles')
         .select('salon_name, slug')
         .eq('id', bookingData.salon_id)
         .maybeSingle()
 
-      // Spojíme data dohromady pro UI
-      const completeData = {
+      const completeData: BookingDetails = {
         ...bookingData,
         profiles: profileData
       }
@@ -62,9 +77,10 @@ export default function CancelBookingPage({ params }: PageProps) {
         setCancelled(true)
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Chyba:', err)
-      setError(err.message)
+      const msg = err instanceof Error ? err.message : 'Neznámá chyba'
+      setError(msg)
     } finally {
       setLoading(false)
     }
@@ -82,8 +98,9 @@ export default function CancelBookingPage({ params }: PageProps) {
       if (error) throw error
       setCancelled(true)
       
-    } catch (err: any) {
-      alert('Chyba: ' + err.message)
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Neznámá chyba'
+        alert('Chyba: ' + msg)
     }
   }
 
