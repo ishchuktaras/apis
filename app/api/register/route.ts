@@ -1,51 +1,62 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // Zde už používáte Prismu
 import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const { email, password, fullName, salonName } = await req.json();
+    const body = await request.json();
+    const { email, password, name, salonName } = body;
 
-    if (!email || !password || !fullName) {
-      return NextResponse.json(
-        { error: "Chybí povinné údaje" },
-        { status: 400 }
-      );
+    if (!email || !password || !name || !salonName) {
+      return new NextResponse("Chybí povinné údaje", { status: 400 });
     }
 
-    // 1. Zkontrolujeme, zda uživatel neexistuje
-    const existingUser = await prisma.users.findUnique({ // Změňte 'users' pokud se tabulka jmenuje 'profiles'
-      where: { email },
+    // 1. Ověříme, zda už email neexistuje
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: "Uživatel s tímto emailem již existuje" },
-        { status: 400 }
-      );
+      return new NextResponse("Uživatel s tímto emailem již existuje", { status: 409 });
     }
 
     // 2. Zahashujeme heslo
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // 3. Vytvoříme uživatele v DB
-    const user = await prisma.users.create({ // Opět, změňte 'users' dle vašeho schema.prisma
-      data: {
-        email,
-        password: hashedPassword,
-        full_name: fullName,
-        salon_name: salonName,
-        role: "owner", // Výchozí role
-      },
+    // 3. Vytvoříme slug pro salon (např. "Muj Salon" -> "muj-salon")
+    // Přidáme náhodné číslo pro unikátnost
+    const slug = salonName.toLowerCase().replace(/ /g, '-') + '-' + Math.floor(Math.random() * 10000);
+
+    // 4. TRANSAKCE: Musíme vytvořit Salon (Tenant) A Uživatele najednou
+    const user = await prisma.$transaction(async (tx) => {
+      // A) Vytvoření Salonu
+      const newTenant = await tx.tenant.create({
+        data: {
+          name: salonName,
+          slug: slug,
+          // primaryColor je nastaven defaultně v DB
+        }
+      });
+
+      // B) Vytvoření Uživatele spojeného se salonem
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          fullName: name,
+          hashedPassword,
+          role: "OWNER", // První uživatel je vždy majitel
+          tenantId: newTenant.id
+        }
+      });
+
+      return newUser;
     });
 
-    return NextResponse.json({ message: "Uživatel vytvořen", userId: user.id });
+    return NextResponse.json(user);
 
-  } catch (error) {
-    console.error("Chyba registrace:", error);
-    return NextResponse.json(
-      { error: "Interní chyba serveru" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    console.error("CHYBA REGISTRACE:", error);
+    const errorMessage = error instanceof Error ? error.message : "Neznámá chyba";
+    return new NextResponse("Interní chyba serveru: " + errorMessage, { status: 500 });
   }
 }
