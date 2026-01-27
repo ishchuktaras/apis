@@ -83,7 +83,7 @@ export default function TeamPage() {
     fetchMembers()
   }, [])
 
-  // --- API VOLÁNÍ (MÍSTO SUPABASE) ---
+  // --- API VOLÁNÍ  ---
 
   const fetchMembers = async () => {
     try {

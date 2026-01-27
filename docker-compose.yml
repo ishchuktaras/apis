@@ -1,3 +1,5 @@
+# docker-compose.yml
+
 # ============================================
 # APIS SaaS - Docker Compose for Coolify/VPS
 # Production deployment configuration
@@ -16,8 +18,8 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - RESEND_API_KEY=${RESEND_API_KEY}
       # Future: GoSMS and Comgate integration
       - GOSMS_API_KEY=${GOSMS_API_KEY:-}
