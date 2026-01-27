@@ -1,9 +1,8 @@
-// app/layout.tsx
-
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css"; 
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "@/components/providers"; // <--- 1. PŘIDÁN IMPORT
 
 // Nastavení fontu Poppins
 const poppins = Poppins({ 
@@ -15,7 +14,6 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "APIS - Systém pro moderní salony",
   description: "Vlastní web a rezervace pro kadeřnictví a beauty salony.",
-    
 };
 
 export default function RootLayout({
@@ -25,9 +23,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="cs">
-      {/* Aplikace fontu a suppressHydrationWarning */}
       <body className={poppins.className} suppressHydrationWarning={true}>
-        {children}
+        {/* 2. PŘIDÁN OBAL PROVIDERS */}
+        <Providers>
+          {children}
+        </Providers>
+        
         <Toaster />
       </body>
     </html>

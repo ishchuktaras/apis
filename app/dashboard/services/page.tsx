@@ -1,12 +1,11 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Plus, Trash2, Edit2, Clock, Banknote } from 'lucide-react'
+import { Plus, Trash2, Edit2, Clock, Banknote, Loader2 } from 'lucide-react'
 import { toast } from "sonner"
 import {
   Dialog,
@@ -18,13 +17,14 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
+// Interface odpovídající Prisma modelu
 interface Service {
   id: string
-  title: string
+  name: string         // Změna z title na name
   price: number
-  duration_minutes: number
+  durationMin: number  // Změna z duration_minutes
   description?: string
-  is_active?: boolean // Přidáno pro typovou kontrolu
+  isActive: boolean    // Změna z is_active
 }
 
 export default function ServicesPage() {
@@ -50,20 +50,14 @@ export default function ServicesPage() {
 
   const fetchServices = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      // Načteme pouze AKTIVNÍ služby
-      const { data, error } = await supabase
-        .from('services')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true) 
-        .order('title')
-
-      if (error) throw error
-      setServices(data || [])
-    } catch (error: unknown) {
+      const res = await fetch("/api/services")
+      if (!res.ok) throw new Error("Chyba při načítání")
+      
+      const data = await res.json()
+      // Filtrujeme jen aktivní služby (pokud API vrací i neaktivní)
+      const activeServices = data.filter((s: Service) => s.isActive !== false)
+      setServices(activeServices)
+    } catch (error) {
       console.error('Chyba:', error)
       toast.error('Nepodařilo se načíst služby')
     } finally {
@@ -76,79 +70,84 @@ export default function ServicesPage() {
     setIsSubmitting(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const serviceData = {
-        title: newService.title,
-        price: parseInt(newService.price),
-        duration_minutes: parseInt(newService.duration),
+      const payload = {
+        name: newService.title, // API čeká "name"
+        price: newService.price,
+        durationMin: newService.duration, // API čeká "durationMin"
         description: newService.description,
-        user_id: user.id,
-        is_active: true // Při vytvoření/editaci je vždy aktivní
+        isActive: true
       }
 
-      let error
+      let res;
       
       if (editingId) {
-        // Update
-        const { error: updateError } = await supabase
-          .from('services')
-          .update(serviceData)
-          .eq('id', editingId)
-        error = updateError
+        // UPDATE (PATCH)
+        // Posíláme data ve formátu, který API očekává (title mapujeme na backendu nebo zde)
+        res = await fetch(`/api/services/${editingId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: newService.title, // Posíláme title, backend si to přebere
+                price: newService.price,
+                duration: newService.duration,
+                description: newService.description
+            })
+        })
       } else {
-        // Insert
-        const { error: insertError } = await supabase
-          .from('services')
-          .insert(serviceData)
-        error = insertError
+        // CREATE (POST)
+        res = await fetch("/api/services", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                name: newService.title,
+                price: newService.price,
+                durationMin: newService.duration,
+                description: newService.description
+            })
+        })
       }
 
-      if (error) throw error
+      if (!res.ok) throw new Error("Chyba při ukládání")
 
       toast.success(editingId ? 'Služba upravena' : 'Služba přidána')
       setIsDialogOpen(false)
       resetForm()
       fetchServices()
 
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : 'Neznámá chyba'
-      toast.error('Chyba: ' + msg)
+    } catch (error: Error | unknown) {
+      const message = error instanceof Error ? error.message : 'Neznámá chyba'
+      toast.error('Chyba: ' + message)
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // UPRAVENÁ FUNKCE PRO "MAZÁNÍ" (ARCHIVACI)
   const handleDelete = async (id: string) => {
-    if (!confirm('Opravdu chcete tuto službu odstranit z nabídky? (Historie rezervací zůstane zachována)')) return
+    if (!confirm('Opravdu chcete tuto službu odstranit z nabídky?')) return
 
     try {
-      // Místo DELETE děláme UPDATE is_active = false
-      const { error } = await supabase
-        .from('services')
-        .update({ is_active: false })
-        .eq('id', id)
+      // Soft delete přes PATCH
+      const res = await fetch(`/api/services/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: false })
+      })
 
-      if (error) throw error
+      if (!res.ok) throw new Error("Chyba při mazání")
 
       toast.success("Služba byla odstraněna z nabídky")
-      // Odebereme ji lokálně ze seznamu
       setServices(services.filter(s => s.id !== id))
       
-    } catch (error: unknown) {
-      console.error(error)
-      const msg = error instanceof Error ? error.message : 'Neznámá chyba'
-      toast.error("Chyba při odstraňování: " + msg)
+    } catch (error: Error | unknown) {
+      toast.error("Chyba při odstraňování")
     }
   }
 
   const startEdit = (service: Service) => {
     setNewService({
-      title: service.title,
+      title: service.name, // Prisma má "name"
       price: service.price.toString(),
-      duration: service.duration_minutes.toString(),
+      duration: service.durationMin.toString(), // Prisma má "durationMin"
       description: service.description || ''
     })
     setEditingId(service.id)
@@ -160,7 +159,7 @@ export default function ServicesPage() {
     setEditingId(null)
   }
 
-  if (loading) return <div className="p-8 text-center">Načítám služby...</div>
+  if (loading) return <div className="p-8 text-center flex justify-center"><Loader2 className="animate-spin mr-2"/> Načítám služby...</div>
 
   return (
     <div className="space-y-6 pb-20">
@@ -172,7 +171,7 @@ export default function ServicesPage() {
         
         <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if(!open) resetForm(); }}>
           <DialogTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 text-white">
+            <Button className="bg-[#F4C430] hover:bg-[#d4a010] text-slate-900">
               <Plus className="h-4 w-4 mr-2" /> Nová služba
             </Button>
           </DialogTrigger>
@@ -211,7 +210,7 @@ export default function ServicesPage() {
                 <Input placeholder="Krátký popis..." value={newService.description} onChange={e => setNewService({...newService, description: e.target.value})} />
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting} className="bg-[#F4C430] hover:bg-[#d4a010] text-slate-900">
                     {isSubmitting ? 'Ukládám...' : 'Uložit'}
                 </Button>
               </DialogFooter>
@@ -230,7 +229,7 @@ export default function ServicesPage() {
             <Card key={service.id} className="hover:shadow-md transition-shadow">
                 <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg font-semibold">{service.title}</CardTitle>
+                    <CardTitle className="text-lg font-semibold">{service.name}</CardTitle>
                     <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-900" onClick={() => startEdit(service)}>
                             <Edit2 className="h-4 w-4" />
@@ -247,7 +246,7 @@ export default function ServicesPage() {
                 <CardContent>
                 <div className="flex items-center gap-4 text-sm text-slate-600">
                     <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded">
-                        <Clock className="h-3 w-3" /> {service.duration_minutes} min
+                        <Clock className="h-3 w-3" /> {service.durationMin} min
                     </div>
                     <div className="flex items-center gap-1 font-semibold text-slate-900">
                         <Banknote className="h-3 w-3" /> {service.price} Kč

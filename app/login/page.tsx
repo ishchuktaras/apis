@@ -1,315 +1,248 @@
-'use client'
+"use client"
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { signIn } from 'next-auth/react' 
+import { useState } from "react"
+import { signIn } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Eye, EyeOff, ArrowLeft, Mail, Loader2 } from 'lucide-react'
-import { toast } from "sonner"
-import { LogoIcon } from "@/components/logo" 
+import { Store, User, Mail, Lock, Loader2 } from "lucide-react"
 
-// --- 1. DEFINICE TYPŮ (Aby ESLint nehlásil chybu) ---
-interface PasswordInputProps {
-  id: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
-
-// --- 2. KOMPONENTA PRO HESLO (Typovaná) ---
-const PasswordInput = ({ id, value, onChange }: PasswordInputProps) => {
-  const [showPassword, setShowPassword] = useState(false)
-
-  return (
-    <div className="relative">
-      <Input 
-        id={id} 
-        type={showPassword ? "text" : "password"} 
-        value={value} 
-        onChange={onChange} 
-        required 
-        minLength={6}
-        className="pr-10 bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]" 
-      />
-      <button
-        type="button"
-        onClick={() => setShowPassword(!showPassword)}
-        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
-        tabIndex={-1}
-      >
-        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    </div>
-  )
-}
-
-export default function AuthPage() {
+export default function LoginPage() {
   const router = useRouter()
-  
-  // Stavy formulářů
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  
-  // Stavy pro registraci
-  const [fullName, setFullName] = useState('')
-  const [salonName, setSalonName] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
 
-  const [loading, setLoading] = useState(false)
-  const [view, setView] = useState<'auth' | 'reset'>('auth') 
+  // Login States
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
-  // --- 3. PŘIHLÁŠENÍ (NextAuth - VPS) ---
+  // Register States
+  const [registerName, setRegisterName] = useState("")
+  const [registerSalonName, setRegisterSalonName] = useState("")
+  const [registerEmail, setRegisterEmail] = useState("")
+  const [registerPassword, setRegisterPassword] = useState("")
+
+  // --- FUNKCE PRO PŘIHLÁŠENÍ ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
+    setIsLoading(true)
+    setError("")
 
     try {
-      // Voláme NextAuth Credentials Provider
-      const result = await signIn('credentials', {
+      const res = await signIn("credentials", {
         email,
         password,
-        redirect: false, 
+        redirect: false,
       })
 
-      if (result?.error) {
-        toast.error('Neplatný email nebo heslo.')
+      if (res?.error) {
+        setError("Špatný email nebo heslo.")
+        setIsLoading(false)
       } else {
-        toast.success('Vítejte zpět!')
-        router.push('/dashboard')
-        router.refresh() 
+        router.push("/dashboard")
+        router.refresh()
       }
-    } catch (error) {
-      toast.error('Něco se pokazilo při přihlašování.')
-    } finally {
-      setLoading(false)
+    } catch (err) {
+      setError("Něco se pokazilo. Zkuste to prosím znovu.")
+      setIsLoading(false)
     }
   }
 
-  // --- 4. REGISTRACE (API Volání na VPS) ---
-  const handleSignUp = async (e: React.FormEvent) => {
+  // --- FUNKCE PRO REGISTRACI ---
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-
-    if (!fullName.trim()) {
-        toast.error('Prosím vyplňte své jméno.')
-        setLoading(false)
-        return
-    }
+    setIsLoading(true)
+    setError("")
 
     try {
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // 1. Volání API - Důležité: Klíče musí odpovídat tomu, co čeká route.ts
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email,
-          password,
-          fullName,
-          salonName: salonName || 'Můj Nový Salon'
+          name: registerName,       // API čeká "name"
+          salonName: registerSalonName, // API čeká "salonName"
+          email: registerEmail,
+          password: registerPassword
         })
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Chyba při registraci')
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(errorText || "Registrace se nezdařila")
       }
 
-      toast.success('Účet vytvořen! Nyní se můžete přihlásit.')
-      setPassword('') // Vyčistit heslo pro bezpečnost
-      
-      // Volitelně přepnout tab na přihlášení, pokud to UI umožňuje,
-      // nebo nechat uživatele kliknout na "Přihlášení".
-      
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Chyba při registraci'
-      toast.error(errorMessage)
+      // 2. Automatické přihlášení po registraci
+      const loginRes = await signIn("credentials", {
+        email: registerEmail,
+        password: registerPassword,
+        redirect: false
+      })
+
+      if (loginRes?.error) {
+        setError("Účet vytvořen, ale přihlášení selhalo. Zkuste se přihlásit ručně.")
+      } else {
+        router.push("/dashboard")
+        router.refresh()
+      }
+
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : "Registrace se nezdařila")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  // --- 5. RESET HESLA ---
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Zde by později přišlo volání API pro odeslání e-mailu (např. přes Resend)
-    toast.info('Funkce obnovy hesla bude brzy dostupná.')
-    setView('auth')
-  }
-
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#F8F5E6] p-4 font-sans">
-      
-      {/* Logo Component */}
-      <div className="mb-8">
-        <Link className="flex items-center justify-center gap-2" href="/">
-           <LogoIcon className="h-12 w-12 text-[#F4C430]" />
-           <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
-        </Link>
-      </div>
-
-      {/* --- OBRAZOVKA: RESET HESLA --- */}
-      {view === 'reset' ? (
-        <Card className="w-full max-w-[400px] border-none shadow-xl shadow-slate-200/50">
-          <CardHeader>
-            <CardTitle>Obnova hesla</CardTitle>
-            <CardDescription>Zadejte svůj e-mail a my vám pošleme instrukce.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-reset">Email</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input 
-                    id="email-reset" 
-                    type="email" 
-                    placeholder="salon@example.com" 
-                    className="pl-9 bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
-                    required 
-                  />
-                </div>
-              </div>
-              <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold" disabled={loading}>
-                {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
-                {loading ? 'Odesílám...' : 'Odeslat odkaz pro obnovu'}
-              </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex justify-center">
-            <Button variant="link" onClick={() => setView('auth')} className="text-slate-500 hover:text-[#1A1A1A]">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Zpět na přihlášení
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : (
+    <div className="flex items-center justify-center min-h-screen bg-slate-50 p-4">
+      <Card className="w-full max-w-md shadow-lg border-slate-200">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
+            Vítejte v systému
+          </CardTitle>
+          <CardDescription>
+            Správa vašeho salonu na jednom místě
+          </CardDescription>
+        </CardHeader>
         
-      /* --- OBRAZOVKA: LOGIN / REGISTRACE --- */
-      <Tabs defaultValue="login" className="w-full max-w-[400px]">
-        
-        <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-200/50 p-1 rounded-xl">
-          <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#1A1A1A] data-[state=active]:shadow-sm">Přihlášení</TabsTrigger>
-          <TabsTrigger value="register" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-[#1A1A1A] data-[state=active]:shadow-sm">Registrace</TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="login" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsTrigger value="login">Přihlášení</TabsTrigger>
+            <TabsTrigger value="register">Registrace</TabsTrigger>
+          </TabsList>
 
-        {/* LOGIN FORM */}
-        <TabsContent value="login">
-          <Card className="border-none shadow-xl shadow-slate-200/50">
-            <CardHeader>
-              <CardTitle className="text-xl">Vítejte zpět</CardTitle>
-              <CardDescription>Přihlaste se do správy svého salonu.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email-login">Email</Label>
-                  <Input 
-                    id="email-login" 
-                    type="email" 
-                    placeholder="salon@example.com" 
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
-                    required 
-                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="pass-login">Heslo</Label>
-                    <button 
-                      type="button"
-                      onClick={() => setView('reset')}
-                      className="text-xs text-slate-500 hover:text-[#F4C430] hover:underline font-medium"
-                    >
-                      Zapomněli jste heslo?
-                    </button>
+          {/* --- LOGIN FORM --- */}
+          <TabsContent value="login">
+            <form onSubmit={handleLogin}>
+              <CardContent className="space-y-4">
+                {error && (
+                  <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
+                    {error}
                   </div>
-                  {/* Použití komponenty bez 'any' */}
-                  <PasswordInput 
-                    id="pass-login" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                  />
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input 
+                      id="email" 
+                      type="email" 
+                      placeholder="jan@salon.cz" 
+                      className="pl-9"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-                <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold h-11" disabled={loading}>
-                  {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
-                  {loading ? 'Pracuji...' : 'Přihlásit se'}
+                <div className="space-y-2">
+                  <Label htmlFor="password">Heslo</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input 
+                      id="password" 
+                      type="password" 
+                      className="pl-9"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" className="w-full bg-[#F4C430] hover:bg-[#d4a010] text-slate-900 font-medium" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isLoading ? "Přihlašování..." : "Přihlásit se"}
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardFooter>
+            </form>
+          </TabsContent>
 
-        {/* REGISTER FORM */}
-        <TabsContent value="register">
-          <Card className="border-none shadow-xl shadow-slate-200/50">
-            <CardHeader>
-              <CardTitle className="text-xl">Nový účet</CardTitle>
-              <CardDescription>Začněte používat APIS zdarma ještě dnes.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSignUp} className="space-y-4">
-                
-                <div className="space-y-2">
-                  <Label htmlFor="fullname-reg">Jméno a Příjmení</Label>
-                  <Input 
-                    id="fullname-reg" 
-                    placeholder="Jan Novák" 
-                    value={fullName} 
-                    onChange={e => setFullName(e.target.value)} 
-                    required 
-                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
-                  />
+          {/* --- REGISTER FORM --- */}
+          <TabsContent value="register">
+            <form onSubmit={handleRegister}>
+              <CardContent className="space-y-4">
+                 {error && (
+                  <div className="p-3 text-sm text-red-500 bg-red-50 border border-red-200 rounded-md">
+                    {error}
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-name">Jméno</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input 
+                        id="reg-name" 
+                        placeholder="Jan Novák" 
+                        className="pl-9"
+                        value={registerName}
+                        onChange={(e) => setRegisterName(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-salon">Název salonu</Label>
+                    <div className="relative">
+                      <Store className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input 
+                        id="reg-salon" 
+                        placeholder="Beauty Studio" 
+                        className="pl-9"
+                        value={registerSalonName}
+                        onChange={(e) => setRegisterSalonName(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="salon-reg">Název Salonu</Label>
-                  <Input 
-                    id="salon-reg" 
-                    placeholder="Studio Exclusive" 
-                    value={salonName} 
-                    onChange={e => setSalonName(e.target.value)} 
-                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email-reg">Email</Label>
-                  <Input 
-                    id="email-reg" 
-                    type="email" 
-                    placeholder="admin@test.cz" 
-                    value={email} 
-                    onChange={e => setEmail(e.target.value)} 
-                    required 
-                    className="bg-white border-slate-200 focus:border-[#F4C430] focus:ring-[#F4C430]"
-                  />
+                  <Label htmlFor="reg-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input 
+                      id="reg-email" 
+                      type="email" 
+                      placeholder="jan@salon.cz" 
+                      className="pl-9"
+                      value={registerEmail}
+                      onChange={(e) => setRegisterEmail(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pass-reg">Heslo</Label>
-                  {/* Použití komponenty bez 'any' */}
-                  <PasswordInput 
-                    id="pass-reg" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                  />
-                  <p className="text-[10px] text-slate-500">Minimálně 6 znaků.</p>
+                  <Label htmlFor="reg-password">Heslo</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input 
+                      id="reg-password" 
+                      type="password" 
+                      className="pl-9"
+                      value={registerPassword}
+                      onChange={(e) => setRegisterPassword(e.target.value)}
+                      required
+                    />
+                  </div>
                 </div>
-                <Button type="submit" className="w-full bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold h-11" disabled={loading}>
-                  {loading ? <Loader2 className="animate-spin w-4 h-4 mr-2" /> : null}
-                  {loading ? 'Vytvářím účet...' : 'Vytvořit účet'}
+              </CardContent>
+              <CardFooter>
+                <Button type="submit" className="w-full bg-[#F4C430] hover:bg-[#d4a010] text-slate-900 font-medium" disabled={isLoading}>
+                  {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isLoading ? "Vytváření účtu..." : "Vytvořit účet"}
                 </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-      </Tabs>
-      )}
+              </CardFooter>
+            </form>
+          </TabsContent>
+        </Tabs>
+      </Card>
     </div>
   )
 }
