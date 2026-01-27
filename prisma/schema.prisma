@@ -1,10 +1,10 @@
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
-  
 }
 
 // --- ENUMS ---
@@ -47,8 +47,6 @@ model Session {
   
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
-// --- CORE TENANT ENTITIES (SaaS Structure) ---
 
 model Tenant {
   id            String   @id @default(uuid())
