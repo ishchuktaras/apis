@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css"; 
 import { Toaster } from "@/components/ui/sonner";
-import { Providers } from "@/components/providers"; // <--- 1. PŘIDÁN IMPORT
+import { Providers } from "@/components/providers"; 
 
 // Nastavení fontu Poppins
 const poppins = Poppins({ 

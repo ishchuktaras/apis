@@ -25,8 +25,9 @@ export async function POST(request: Request) {
     // Vracíme odpověď s daty od Resend
     return NextResponse.json(data);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Chyba při odesílání emailu:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Neznámá chyba';
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
