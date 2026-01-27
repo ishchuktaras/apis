@@ -1,10 +1,11 @@
 datasource db {
   provider = "postgresql"
+  
 }
 
 generator client {
   provider = "prisma-client-js"
-  url      = env("DATABASE_URL")
+  
 }
 
 // --- ENUMS ---
