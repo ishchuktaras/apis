@@ -1,6 +1,7 @@
 # Dependencies
 node_modules
 npm-debug.log
+yarn-debug.log
 yarn-error.log
 
 # Next.js
@@ -21,27 +22,35 @@ coverage
 .DS_Store
 Thumbs.db
 
-# Environment files (handled by Coolify)
+# Environment
 .env
 .env.local
-.env.development
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Git
 .git
 .gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
 
 # Documentation
 README.md
 docs
 *.md
 
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+# Build artifacts
+dist
+build
 
-# Misc
+# Logs
+logs
 *.log
-*.tmp
-.cache
+
+# Temporary files
+tmp
+temp
