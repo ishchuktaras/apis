@@ -25,7 +25,7 @@ export async function GET(
       profile: {
         id: tenant.id,
         salon_name: tenant.name,
-        address: "Adresa v přípravě", // Můžeš přidat do schématu později
+        address: "Adresa v přípravě", 
         phone: "Telefon v přípravě",
         logo_url: tenant.logoUrl,
         slug: tenant.slug,

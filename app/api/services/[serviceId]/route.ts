@@ -28,7 +28,7 @@ export async function PATCH(
     // Získáme tenantId bezpečně pomocí přetypování (stejně jako v POST)
     const userTenantId = (session.user as SessionUser).tenantId;
 
-    // Zde jsme odstranili @ts-expect-error, protože už není potřeba
+   
     if (!existingService || existingService.tenantId !== userTenantId) {
       return new NextResponse("Not found or unauthorized", { status: 404 });
     }

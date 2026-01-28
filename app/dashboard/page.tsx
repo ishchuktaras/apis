@@ -1,9 +1,10 @@
+// app/dashboard/page.tsx
+
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth" 
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-// ✅ PŘIDÁNO: Importujeme LucideIcon pro správné typování ikon
 import { Users, Calendar, Banknote, TrendingUp, Clock, ArrowRight, Store, LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"

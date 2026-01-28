@@ -7,14 +7,16 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
+    
+    // Tato kontrola "ujišťuje" TypeScript, že user existuje
+    if (!session?.user?.email) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email! },
+      where: { email: session.user.email }, // ODSTRANĚNO: ?. a !
       include: {
-        tenant: true // Přibalíme i data o salonu
+        tenant: true
       }
     });
 
@@ -22,7 +24,6 @@ export async function GET(req: Request) {
       return new NextResponse("Uživatel nenalezen", { status: 404 });
     }
 
-    // Vrátíme kombinovaná data
     return NextResponse.json({
       userName: user.fullName,
       email: user.email,
@@ -41,25 +42,28 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
+    
+    // Opět: kontrolujeme email přímo zde
+    if (!session?.user?.email) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const body = await req.json();
     const { userName, salonName, primaryColor } = body;
 
-    // Transakce: Aktualizujeme uživatele I salon najednou
+    // Email si uložíme do konstanty, abychom nemuseli opakovat session.user.email
+    const userEmail = session.user.email;
+
     await prisma.$transaction(async (tx) => {
       // 1. Update uživatele
       await tx.user.update({
-        where: { email: session.user?.email! },
+        where: { email: userEmail }, // ČISTÉ: bez ?. a !
         data: { fullName: userName }
       });
 
       // 2. Update salonu (tenanta)
-      // Potřebujeme ID salonu, získáme ho přes uživatele
       const user = await tx.user.findUnique({
-        where: { email: session.user?.email! },
+        where: { email: userEmail }, // ČISTÉ: bez ?. a !
         select: { tenantId: true }
       });
 
