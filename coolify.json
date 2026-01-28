@@ -1,0 +1,62 @@
+{
+  "$schema": "https://coolify.io/schema.json",
+  "name": "APIS SaaS",
+  "description": "Beauty & Wellness SaaS platform - Salonio",
+  "settings": {
+    "build_pack": "dockerfile",
+    "dockerfile": "Dockerfile",
+    "is_static": false,
+    "ports_exposes": "3000",
+    "health_check_enabled": true,
+    "health_check_path": "/api/health",
+    "health_check_interval": 30,
+    "health_check_timeout": 5
+  },
+  "environment": {
+    "production": {
+      "NODE_ENV": "production",
+      "DATABASE_URL": "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}",
+      "REDIS_URL": "redis://redis:6379",
+      "NEXT_PUBLIC_APP_URL": "https://app.salonio.cz"
+    }
+  },
+  "resources": {
+    "limits": {
+      "cpus": "2",
+      "memory": "2G"
+    },
+    "reservations": {
+      "cpus": "0.5",
+      "memory": "512M"
+    }
+  },
+  "domains": [
+    {
+      "domain": "app.salonio.cz",
+      "https": true,
+      "www": false
+    },
+    {
+      "domain": "api.salonio.cz",
+      "https": true,
+      "www": false
+    }
+  ],
+  "services": {
+    "postgresql": {
+      "version": "16",
+      "volumes": [
+        "/mnt/wedos-disk/backups:/backup-storage"
+      ],
+      "backup": {
+        "enabled": true,
+        "schedule": "0 2 * * *",
+        "retention_days": 30
+      }
+    },
+    "redis": {
+      "version": "7",
+      "maxmemory": "256mb"
+    }
+  }
+}

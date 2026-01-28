@@ -1,90 +1,205 @@
-# docker-compose.yml
+# ==============================================================
+# APIS SaaS - Docker Compose for WEDOS VPS ON
+# ==============================================================
+# VPS: ov8760 (4 GB RAM, 30 GB SSD, 1 vCPU)
+# IP: 89.221.212.146
+# WEDOS Disk: stor34711 (5 GB) - 34711.s11.wedos.net
+# Designed for Coolify deployment with PostgreSQL and Redis
+# ==============================================================
 
-# ============================================
-# APIS SaaS - Docker Compose for Coolify/VPS
-# Production deployment configuration
-# ============================================
+version: '3.8'
 
 services:
+  # ===========================================
   # Next.js Application
+  # ===========================================
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: apis-app
+    container_name: apis-saas-app
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - NEXTAUTH_URL=${NEXTAUTH_URL}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-apis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-apis_production}
+      - REDIS_URL=redis://redis:6379
       - RESEND_API_KEY=${RESEND_API_KEY}
-      # Future: GoSMS and Comgate integration
-      - GOSMS_API_KEY=${GOSMS_API_KEY:-}
-      - GOSMS_CLIENT_ID=${GOSMS_CLIENT_ID:-}
-      - COMGATE_MERCHANT_ID=${COMGATE_MERCHANT_ID:-}
-      - COMGATE_SECRET=${COMGATE_SECRET:-}
-    networks:
-      - apis-network
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-https://app.salonio.cz}
+      - COMGATE_MERCHANT_ID=${COMGATE_MERCHANT_ID}
+      - COMGATE_SECRET=${COMGATE_SECRET}
+      - GOSMS_CLIENT_ID=${GOSMS_CLIENT_ID}
+      - GOSMS_CLIENT_SECRET=${GOSMS_CLIENT_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # PostgreSQL Database
-  db:
-    image: postgres:16-alpine
-    container_name: apis-db
-    restart: unless-stopped
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-apis}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB:-apis_production}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      # Mount Wedos Disk for backups
-      - ${WEDOS_DISK_MOUNT:-/mnt/wedos-disk}/backups/postgres:/backups
-    ports:
-      - "5432:5432"
+      redis:
+        condition: service_healthy
     networks:
       - apis-network
+    # Resource limits for VPS ON 4GB RAM
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 512M
+    labels:
+      - "coolify.managed=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.apis-app.rule=Host(`app.salonio.cz`)"
+      - "traefik.http.routers.apis-app.entrypoints=websecure"
+      - "traefik.http.routers.apis-app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.apis-app.loadbalancer.server.port=3000"
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: apis-saas-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-apis_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-apis_production}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # WEDOS Disk mount for backups
+      - /mnt/wedos-disk/backups:/backup-storage
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    # Resource limits for VPS ON 4GB RAM
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 256M
+    # PostgreSQL tuning for 4GB RAM VPS
+    command: >
+      postgres
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c maintenance_work_mem=128MB
+      -c work_mem=16MB
+      -c max_connections=50
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c random_page_cost=1.1
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apis} -d ${POSTGRES_DB:-apis_production}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apis_user} -d ${POSTGRES_DB:-apis_production}"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Redis for caching and sessions (optional)
-  redis:
-    image: redis:7-alpine
-    container_name: apis-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    ports:
-      - "6379:6379"
     networks:
       - apis-network
+    labels:
+      - "coolify.managed=true"
+
+  # ===========================================
+  # Redis for caching and sessions
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: apis-saas-redis
+    restart: unless-stopped
+    # Optimized for VPS ON 4GB RAM - max 256MB for Redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10
+    volumes:
+      - redis-data:/data
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+        reservations:
+          memory: 64M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - apis-network
+    labels:
+      - "coolify.managed=true"
+
+  # ===========================================
+  # Automated Backup Service
+  # ===========================================
+  backup:
+    image: postgres:16-alpine
+    container_name: apis-saas-backup
+    restart: "no"
+    environment:
+      - PGHOST=db
+      - PGUSER=${POSTGRES_USER:-apis_user}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PGDATABASE=${POSTGRES_DB:-apis_production}
+      # WEDOS Disk WebDAV credentials
+      - WEDOS_DISK_SERVER=34711.s11.wedos.net
+      - WEDOS_DISK_USER=s34711
+      - WEDOS_DISK_PASS=${WEDOS_DISK_PASSWORD}
+    volumes:
+      # WEDOS Disk mount point
+      - /mnt/wedos-disk:/mnt/wedos-disk
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./scripts/wedos-disk-sync.sh:/wedos-disk-sync.sh:ro
+    entrypoint: ["/bin/sh", "-c", "chmod +x /backup.sh /wedos-disk-sync.sh && sleep infinity"]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - apis-network
+    profiles:
+      - tools
+
+  # ===========================================
+  # Cron scheduler for automated backups
+  # ===========================================
+  cron:
+    image: alpine:latest
+    container_name: apis-saas-cron
+    restart: unless-stopped
+    volumes:
+      - /mnt/wedos-disk:/mnt/wedos-disk
+      - ./scripts/backup.sh:/backup.sh:ro
+      - ./scripts/wedos-disk-sync.sh:/wedos-disk-sync.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PGHOST=db
+      - PGUSER=${POSTGRES_USER:-apis_user}
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - PGDATABASE=${POSTGRES_DB:-apis_production}
+    command: >
+      sh -c "
+        apk add --no-cache postgresql-client curl dcron &&
+        chmod +x /backup.sh /wedos-disk-sync.sh &&
+        echo '0 2 * * * /backup.sh >> /var/log/backup.log 2>&1' > /etc/crontabs/root &&
+        echo '0 3 * * * /wedos-disk-sync.sh >> /var/log/wedos-sync.log 2>&1' >> /etc/crontabs/root &&
+        crond -f -l 2
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    networks:
+      - apis-network
+    profiles:
+      - production
 
 networks:
   apis-network:
     driver: bridge
+    name: apis-network
 
 volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
+  postgres-data:
+    name: apis-postgres-data
+  redis-data:
+    name: apis-redis-data

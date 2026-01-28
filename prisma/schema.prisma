@@ -1,127 +1,314 @@
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+// ==============================================================
+// APIS SaaS - Prisma Schema for Self-Hosted PostgreSQL
+// ==============================================================
+// WEDOS VPS ON: ov8760 (4 GB RAM, 30 GB SSD)
+// Database: PostgreSQL 16 Alpine
+// ==============================================================
 
 generator client {
   provider = "prisma-client-js"
 }
 
-// --- ENUMS ---
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-enum Role {
-  OWNER
+// ==============================================================
+// USER & AUTHENTICATION
+// ==============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  name          String?
+  phone         String?
+  role          UserRole  @default(CUSTOMER)
+  avatarUrl     String?   @map("avatar_url")
+  
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLoginAt   DateTime? @map("last_login_at")
+  
+  // Relations
+  ownedSalons   Salon[]   @relation("SalonOwner")
+  salonId       String?   @map("salon_id")
+  salon         Salon?    @relation("SalonEmployees", fields: [salonId], references: [id])
+  
+  // Employee specific
+  services      ServiceEmployee[]
+  bookings      Booking[] @relation("BookingEmployee")
+  
+  // Customer specific
+  customerBookings Booking[] @relation("BookingCustomer")
+  reviews       Review[]
+  
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  SALON_OWNER
   EMPLOYEE
+  CUSTOMER
+}
+
+// ==============================================================
+// SALON
+// ==============================================================
+
+model Salon {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  
+  // Contact
+  email       String?
+  phone       String?
+  website     String?
+  
+  // Address
+  street      String?
+  city        String?
+  postalCode  String?  @map("postal_code")
+  country     String   @default("CZ")
+  
+  // Settings
+  timezone    String   @default("Europe/Prague")
+  currency    String   @default("CZK")
+  logoUrl     String?  @map("logo_url")
+  coverUrl    String?  @map("cover_url")
+  
+  // Subscription
+  plan        SalonPlan @default(FREE)
+  planExpiresAt DateTime? @map("plan_expires_at")
+  
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  ownerId     String   @map("owner_id")
+  owner       User     @relation("SalonOwner", fields: [ownerId], references: [id])
+  employees   User[]   @relation("SalonEmployees")
+  services    Service[]
+  bookings    Booking[]
+  workingHours WorkingHours[]
+  reviews     Review[]
+  payments    Payment[]
+  
+  @@map("salons")
+}
+
+enum SalonPlan {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+// ==============================================================
+// SERVICES
+// ==============================================================
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  // Pricing
+  price       Decimal  @db.Decimal(10, 2)
+  currency    String   @default("CZK")
+  
+  // Duration in minutes
+  duration    Int
+  bufferBefore Int     @default(0) @map("buffer_before")
+  bufferAfter  Int     @default(0) @map("buffer_after")
+  
+  // Settings
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  color       String?
+  
+  // Category
+  categoryId  String?  @map("category_id")
+  category    ServiceCategory? @relation(fields: [categoryId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  salonId     String   @map("salon_id")
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  employees   ServiceEmployee[]
+  bookings    Booking[]
+  
+  @@map("services")
+}
+
+model ServiceCategory {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  services    Service[]
+  
+  @@map("service_categories")
+}
+
+model ServiceEmployee {
+  id          String   @id @default(cuid())
+  serviceId   String   @map("service_id")
+  employeeId  String   @map("employee_id")
+  
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  employee    User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@unique([serviceId, employeeId])
+  @@map("service_employees")
+}
+
+// ==============================================================
+// BOOKINGS
+// ==============================================================
+
+model Booking {
+  id          String        @id @default(cuid())
+  
+  // Timing
+  startTime   DateTime      @map("start_time")
+  endTime     DateTime      @map("end_time")
+  
+  // Status
+  status      BookingStatus @default(PENDING)
+  
+  // Customer info (can be guest)
+  customerId  String?       @map("customer_id")
+  customer    User?         @relation("BookingCustomer", fields: [customerId], references: [id])
+  guestName   String?       @map("guest_name")
+  guestEmail  String?       @map("guest_email")
+  guestPhone  String?       @map("guest_phone")
+  
+  // Notes
+  customerNote String?      @map("customer_note")
+  internalNote String?      @map("internal_note")
+  
+  // Cancellation
+  cancelledAt  DateTime?    @map("cancelled_at")
+  cancelReason String?      @map("cancel_reason")
+  cancelToken  String?      @unique @map("cancel_token")
+  
+  // Timestamps
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  
+  // Relations
+  salonId     String        @map("salon_id")
+  salon       Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  serviceId   String        @map("service_id")
+  service     Service       @relation(fields: [serviceId], references: [id])
+  employeeId  String        @map("employee_id")
+  employee    User          @relation("BookingEmployee", fields: [employeeId], references: [id])
+  payment     Payment?
+  
+  @@index([salonId, startTime])
+  @@index([employeeId, startTime])
+  @@map("bookings")
 }
 
 enum BookingStatus {
   PENDING
   CONFIRMED
-  CANCELLED
+  IN_PROGRESS
   COMPLETED
+  CANCELLED
   NO_SHOW
 }
 
-// --- AUTHENTICATION ---
+// ==============================================================
+// WORKING HOURS
+// ==============================================================
 
-model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  hashedPassword String    
-  fullName       String?
-  role           Role      @default(OWNER)
+model WorkingHours {
+  id          String   @id @default(cuid())
+  dayOfWeek   Int      @map("day_of_week") // 0 = Sunday, 1 = Monday, etc.
+  startTime   String   @map("start_time") // "09:00"
+  endTime     String   @map("end_time")   // "17:00"
+  isEnabled   Boolean  @default(true) @map("is_enabled")
   
-  tenantId       String
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // Can be salon-wide or employee-specific
+  salonId     String   @map("salon_id")
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  employeeId  String?  @map("employee_id")
   
-  sessions       Session[] 
-
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  @@unique([salonId, employeeId, dayOfWeek])
+  @@map("working_hours")
 }
 
-model Session {
-  id        String   @id @default(uuid())
-  userId    String
-  expiresAt DateTime
+// ==============================================================
+// PAYMENTS (Comgate Integration)
+// ==============================================================
+
+model Payment {
+  id            String        @id @default(cuid())
   
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Amount
+  amount        Decimal       @db.Decimal(10, 2)
+  currency      String        @default("CZK")
+  
+  // Status
+  status        PaymentStatus @default(PENDING)
+  
+  // Comgate specific
+  transactionId String?       @unique @map("transaction_id")
+  paymentMethod String?       @map("payment_method")
+  
+  // Timestamps
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  
+  // Relations
+  bookingId     String        @unique @map("booking_id")
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  salonId       String        @map("salon_id")
+  salon         Salon         @relation(fields: [salonId], references: [id])
+  
+  @@map("payments")
 }
 
-model Tenant {
-  id            String   @id @default(uuid())
-  name          String
-  slug          String   @unique
-  customDomain  String?  @unique
-  logoUrl       String?
-  primaryColor  String   @default("#F4C430")
-  
-  users         User[]
-  services      Service[]
-  bookings      Booking[]
-  businessHours BusinessHours[]
-  clients       Client[]
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+enum PaymentStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+  FAILED
 }
 
-model Service {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  durationMin Int
-  color       String?
-  isActive    Boolean  @default(true)
-  
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  bookings    Booking[]
-}
+// ==============================================================
+// REVIEWS
+// ==============================================================
 
-model Client {
-  id        String    @id @default(uuid())
-  fullName  String
-  email     String?
-  phone     String
-  notes     String?
+model Review {
+  id          String   @id @default(cuid())
+  rating      Int      // 1-5
+  comment     String?
   
-  tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  bookings  Booking[]
+  // Moderation
+  isPublished Boolean  @default(false) @map("is_published")
   
-  createdAt DateTime  @default(now())
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
   
-  @@unique([tenantId, phone])
-}
-
-model Booking {
-  id        String        @id @default(uuid())
-  startTime DateTime
-  endTime   DateTime
-  status    BookingStatus @default(PENDING)
-  smsSent   Boolean       @default(false)
+  // Relations
+  salonId     String   @map("salon_id")
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String   @map("customer_id")
+  customer    User     @relation(fields: [customerId], references: [id])
   
-  tenantId  String
-  tenant    Tenant    @relation(fields: [tenantId], references: [id])
-  serviceId String
-  service   Service   @relation(fields: [serviceId], references: [id])
-  clientId  String
-  client    Client    @relation(fields: [clientId], references: [id])
-  
-  createdAt DateTime  @default(now())
-}
-
-model BusinessHours {
-  id        String  @id @default(uuid())
-  dayOfWeek Int
-  openTime  String
-  closeTime String
-  isClosed  Boolean @default(false)
-
-  tenantId  String
-  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@unique([tenantId, dayOfWeek])
+  @@map("reviews")
 }
