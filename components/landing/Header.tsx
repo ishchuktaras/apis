@@ -1,30 +1,47 @@
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
-import { LogoIcon } from "@/components/logo" // Předpokládám, že logo.tsx je v components/
+import { LogoIcon } from "@/components/logo"
 
 export const LandingHeader = () => {
   return (
-    <header className="px-4 lg:px-6 h-16 flex items-center border-b bg-white sticky top-0 z-50">
-      <Link className="flex items-center justify-center gap-2" href="#">
+    <header className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-100 transition-all">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         
-          <LogoIcon className="h-12 w-12 text-white" />
-      
-        <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
-      </Link>
-      <nav className="ml-auto flex gap-4 sm:gap-6 items-center">
-        <Link className="text-sm font-medium hover:underline underline-offset-4 hidden sm:block" href="#funkce">
-          Funkce
+        {/* Logo */}
+        <Link className="flex items-center gap-2 group" href="/">
+          <LogoIcon className="h-8 w-8 text-[#F4C430] transition-transform group-hover:scale-110" />
+          <span className="font-bold text-xl tracking-tight text-slate-900">APIS</span>
         </Link>
-        <Link className="text-sm font-medium hover:underline underline-offset-4 hidden sm:block" href="#cenik">
-          Ceník
-        </Link>
-        <Link href="/login">
-          <Button variant="outline" className="mr-2">Přihlásit se</Button>
-        </Link>
-        <Link href="/login">
-          <Button className="bg-slate-900 hover:bg-slate-800 text-white">Vyzkoušet zdarma</Button>
-        </Link>
-      </nav>
+
+        {/* Desktop Navigace */}
+        <nav className="hidden md:flex gap-8 items-center">
+          <Link className="text-sm font-medium text-slate-600 hover:text-[#1A1A1A] transition-colors" href="#funkce">
+            Funkce
+          </Link>
+          <Link className="text-sm font-medium text-slate-600 hover:text-[#1A1A1A] transition-colors" href="#cenik">
+            Ceník
+          </Link>
+          <div className="h-4 w-px bg-slate-200 mx-2" />
+          <Link href="/login" className="text-sm font-medium text-slate-900 hover:text-[#F4C430] transition-colors">
+            Přihlásit se
+          </Link>
+          <Link href="/login?view=register">
+            <Button className="bg-[#1A1A1A] hover:bg-slate-800 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all">
+              Vyzkoušet zdarma
+            </Button>
+          </Link>
+        </nav>
+
+        {/* Mobile Menu Placeholder (pro jednoduchost jen tlačítko) */}
+        <div className="md:hidden">
+          <Link href="/login">
+            <Button size="sm" variant="outline" className="border-[#F4C430] text-[#1A1A1A]">
+              Vstoupit
+            </Button>
+          </Link>
+        </div>
+
+      </div>
     </header>
   )
 }

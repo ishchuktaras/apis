@@ -1,32 +1,37 @@
-import { Resend } from 'resend';
+// app/api/send-email/route.ts
+import nodemailer from 'nodemailer';
 import { NextResponse } from 'next/server';
-
-// Ujisti se, že máš RESEND_API_KEY v souboru .env.local
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(request: Request) {
   try {
-    // Rozbalení dat z požadavku (to, subject, html)
     const { to, subject, html } = await request.json();
 
-    // Validace (jednoduchá)
     if (!to || !subject || !html) {
-      return NextResponse.json({ error: 'Chybí povinné parametry (to, subject, html)' }, { status: 400 });
+      return NextResponse.json({ error: 'Chybí povinné parametry' }, { status: 400 });
     }
 
-    // Odeslání e-mailu přes Resend
-    const data = await resend.emails.send({
-      from: 'APIS <onboarding@resend.dev>', // Používáme testovací doménu Resend (ve free verzi nutné)
-      to: [to], // POZOR: Ve free verzi zde musí být TVŮJ email (na který jsi se registroval na Resend.com)
-      subject: subject,
-      html: html,
+    // Konfigurace transportu (údaje budou v .env)
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_SERVER_HOST,
+      port: Number(process.env.EMAIL_SERVER_PORT) || 465,
+      secure: true, // true pro port 465, false pro ostatní
+      auth: {
+        user: process.env.EMAIL_SERVER_USER,
+        pass: process.env.EMAIL_SERVER_PASSWORD,
+      },
     });
 
-    // Vracíme odpověď s daty od Resend
-    return NextResponse.json(data);
+    const info = await transporter.sendMail({
+      from: `"APIS SaaS" <${process.env.EMAIL_SERVER_USER}>`,
+      to,
+      subject,
+      html,
+    });
+
+    return NextResponse.json({ success: true, messageId: info.messageId });
 
   } catch (error: unknown) {
-    console.error('Chyba při odesílání emailu:', error);
+    console.error('Chyba při odesílání přes SMTP:', error);
     const errorMessage = error instanceof Error ? error.message : 'Neznámá chyba';
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }

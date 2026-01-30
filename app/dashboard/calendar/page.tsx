@@ -1,3 +1,5 @@
+// app/dashboard/calendar/page.tsx
+
 "use client"
 
 import { useState, useEffect } from 'react'
@@ -14,6 +16,8 @@ interface Booking {
   client: { fullName: string }
   service: { name: string; durationMin: number }
 }
+
+export const dynamic = 'force-dynamic';
 
 export default function CalendarPage() {
   const [bookings, setBookings] = useState<Booking[]>([])

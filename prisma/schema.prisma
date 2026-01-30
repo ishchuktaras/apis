@@ -1,6 +1,6 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url=env("DATABASE_URL")
 }
 
 generator client {
@@ -124,4 +124,26 @@ model BusinessHours {
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, dayOfWeek])
+}
+
+model Employee {
+  id             String   @id @default(uuid())
+  createdAt      DateTime @default(now()) @map("created_at")
+  name           String
+  role           String?
+  color          String?
+  
+  // Vazba na uživatele
+  userId         String   @map("user_id")
+  // user User @relation(...) // Odkomentujte, pokud máte model User a chcete vazbu
+
+  // NOVÉ SLOUPCE (Musí odpovídat SQL migraci)
+  type           String   @default("PERSON") // 'PERSON' | 'RESOURCE'
+  email          String?
+  phone          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  ico            String?
+  commissionRate Decimal? @default(0) @map("commission_rate") @db.Decimal(10, 2)
+
+  @@map("employees")
 }
